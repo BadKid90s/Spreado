@@ -6,3 +6,29 @@
 2025-12-13 08:30:33.477 | SUCCESS  | uploader.xiaohongshu_uploader.main:upload:314 -   [-]视频发布成功
 2025-12-13 08:30:33.486 | SUCCESS  | uploader.xiaohongshu_uploader.main:upload:322 -   [-]cookie更新完毕！
 2025-12-13 08:32:22.154 | INFO     | uploader.xiaohongshu_uploader.main:xiaohongshu_setup:125 - [+] cookie文件不存在或已失效，即将自动打开浏览器，请扫码登录，登陆后会自动生成cookie文件
+2025-12-13 08:52:47.202 | INFO     | uploader.xiaohongshu_uploader.main:xiaohongshu_setup:93 - [+] cookie文件不存在或已失效，即将自动打开浏览器，请扫码登录，登陆后会自动生成cookie文件
+2025-12-13 08:52:48.886 | INFO     | uploader.xiaohongshu_uploader.main:xiaohongshu_cookie_gen:103 - [+] 使用自动检测到的Chrome浏览器: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+2025-12-13 08:53:38.701 | INFO     | uploader.xiaohongshu_uploader.main:xiaohongshu_setup:93 - [+] cookie文件不存在或已失效，即将自动打开浏览器，请扫码登录，登陆后会自动生成cookie文件
+2025-12-13 08:53:39.041 | INFO     | uploader.xiaohongshu_uploader.main:xiaohongshu_cookie_gen:103 - [+] 使用自动检测到的Chrome浏览器: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+2025-12-13 08:57:17.570 | INFO     | uploader.xiaohongshu_uploader.main:xiaohongshu_setup:93 - [+] cookie文件不存在或已失效，即将自动打开浏览器，请扫码登录，登陆后会自动生成cookie文件
+2025-12-13 08:57:17.927 | INFO     | uploader.xiaohongshu_uploader.main:xiaohongshu_cookie_gen:103 - [+] 使用自动检测到的Chrome浏览器: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+2025-12-13 08:57:23.825 | INFO     | uploader.xiaohongshu_uploader.main:xiaohongshu_setup:93 - [+] cookie文件不存在或已失效，即将自动打开浏览器，请扫码登录，登陆后会自动生成cookie文件
+2025-12-13 08:57:24.181 | INFO     | uploader.xiaohongshu_uploader.main:xiaohongshu_cookie_gen:103 - [+] 使用自动检测到的Chrome浏览器: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+2025-12-13 08:57:49.820 | INFO     | uploader.xiaohongshu_uploader.main:xiaohongshu_setup:93 - [+] cookie文件不存在或已失效，即将自动打开浏览器，请扫码登录，登陆后会自动生成cookie文件
+2025-12-13 08:57:50.174 | INFO     | uploader.xiaohongshu_uploader.main:xiaohongshu_cookie_gen:103 - [+] 使用自动检测到的Chrome浏览器: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+2025-12-13 08:58:32.542 | INFO     | uploader.xiaohongshu_uploader.main:xiaohongshu_setup:93 - [+] cookie文件不存在或已失效，即将自动打开浏览器，请扫码登录，登陆后会自动生成cookie文件
+2025-12-13 08:58:45.944 | INFO     | uploader.xiaohongshu_uploader.main:xiaohongshu_cookie_gen:103 - [+] 使用自动检测到的Chrome浏览器: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+2025-12-13 09:06:16.043 | INFO     | uploader.xiaohongshu_uploader.main:__init__:129 - [+] 自动检测到Chrome浏览器路径: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+2025-12-13 09:07:43.612 | INFO     | uploader.xiaohongshu_uploader.main:xiaohongshu_setup:93 - [+] cookie文件不存在或已失效，即将自动打开浏览器，请扫码登录，登陆后会自动生成cookie文件
+2025-12-13 09:07:43.962 | INFO     | uploader.xiaohongshu_uploader.main:xiaohongshu_cookie_gen:103 - [+] 使用自动检测到的Chrome浏览器: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+2025-12-13 09:08:45.570 | INFO     | uploader.xiaohongshu_uploader.main:__init__:129 - [+] 自动检测到Chrome浏览器路径: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+2025-12-13 09:24:08.629 | INFO     | uploader.xiaohongshu_uploader.main:xiaohongshu_setup:93 - [+] cookie文件不存在或已失效，即将自动打开浏览器，请扫码登录，登陆后会自动生成cookie文件
+2025-12-13 09:24:08.999 | INFO     | uploader.xiaohongshu_uploader.main:xiaohongshu_cookie_gen:110 - [+] 使用自动检测到的Chrome浏览器: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+2025-12-13 09:25:20.387 | INFO     | uploader.xiaohongshu_uploader.main:__init__:179 - [+] 自动检测到Chrome浏览器路径: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+2025-12-13 09:25:23.496 | INFO     | uploader.xiaohongshu_uploader.main:upload:233 - [+]正在上传-------男子为了心爱之人每天坚守❤️‍🩹.mp4
+2025-12-13 09:25:23.496 | INFO     | uploader.xiaohongshu_uploader.main:upload:235 - [-] 正在打开主页...
+2025-12-13 09:25:26.556 | INFO     | uploader.xiaohongshu_uploader.main:upload:258 - [+] 检测到上传成功标识!
+2025-12-13 09:25:27.558 | INFO     | uploader.xiaohongshu_uploader.main:upload:273 -   [-] 正在填充标题和话题...
+2025-12-13 09:25:27.812 | INFO     | uploader.xiaohongshu_uploader.main:upload:289 - 总共添加1个话题
+2025-12-13 09:25:30.419 | SUCCESS  | uploader.xiaohongshu_uploader.main:upload:339 -   [-]视频发布成功
+2025-12-13 09:25:30.426 | SUCCESS  | uploader.xiaohongshu_uploader.main:upload:347 -   [-]cookie更新完毕！

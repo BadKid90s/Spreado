@@ -6,13 +6,16 @@ import os
 import asyncio
 import platform
 
-from conf import LOCAL_CHROME_PATH, LOCAL_CHROME_HEADLESS
+from conf import LOCAL_CHROME_HEADLESS,USE_LOCAL_BROWSER
 from utils.base_social_media import set_init_script
 from utils.log import xiaohongshu_logger
 
 
-async def get_chrome_path():
-    """自动检测本地Chrome浏览器路径"""
+def get_chrome_path():
+    """自动检测本地Chrome浏览器路径
+    支持Windows、macOS和Linux系统
+    返回Chrome可执行文件路径或None
+    """
     system = platform.system()
 
     if system == "Windows":
@@ -54,7 +57,12 @@ async def get_chrome_path():
 
 async def cookie_auth(account_file):
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=LOCAL_CHROME_HEADLESS)
+        # 获取Chrome浏览器路径
+        chrome_path = get_chrome_path()
+        if chrome_path:
+            browser = await playwright.chromium.launch(headless=LOCAL_CHROME_HEADLESS, executable_path=chrome_path)
+        else:
+            browser = await playwright.chromium.launch(headless=LOCAL_CHROME_HEADLESS)
         context = await browser.new_context(storage_state=account_file)
         context = await set_init_script(context)
         # 创建一个新的页面
@@ -88,21 +96,73 @@ async def xiaohongshu_setup(account_file, handle=False):
 
 
 async def xiaohongshu_cookie_gen(account_file):
+    url_changed_event = asyncio.Event()
+
+    async def on_url_change():
+        # 检查是否是主框架的变化
+        if page.url != original_url:
+            url_changed_event.set()
+
     async with async_playwright() as playwright:
-        options = {
-            'headless': LOCAL_CHROME_HEADLESS
-        }
-        # Make sure to run headed.
-        browser = await playwright.chromium.launch(**options)
+        # 获取Chrome浏览器路径
+        chrome_path = get_chrome_path()
+        if chrome_path:
+            xiaohongshu_logger.info(f'[+] 使用自动检测到的Chrome浏览器: {chrome_path}')
+            browser = await playwright.chromium.launch(headless=LOCAL_CHROME_HEADLESS, executable_path=chrome_path)
+        else:
+            browser = await playwright.chromium.launch(headless=LOCAL_CHROME_HEADLESS)
         # Setup context however you like.
         context = await browser.new_context()  # Pass any options
         context = await set_init_script(context)
         # Pause the page, and start recording manually.
         page = await context.new_page()
         await page.goto("https://creator.xiaohongshu.com/")
-        await page.pause()
-        # 点击调试器的继续，保存cookie
+        await page.locator('img.css-wemwzq').click()
+
+        img_locator = page.get_by_role("img").nth(2)
+        # 获取 src 属性值
+        src = await img_locator.get_attribute("src")
+        original_url = page.url
+        print("✅ 图片地址:", src)
+        # 监听页面的 'framenavigated' 事件，只关注主框架的变化
+        page.on('framenavigated',
+                lambda frame: asyncio.create_task(on_url_change()) if frame == page.main_frame else None)
+
+        try:
+            # 等待 URL 变化或超时
+            await asyncio.wait_for(url_changed_event.wait(), timeout=200)  # 最多等待 200 秒
+            print("监听页面跳转成功")
+        except asyncio.TimeoutError:
+            print("监听页面跳转超时")
+            await page.close()
+            await context.close()
+            await browser.close()
+            return None
         await context.storage_state(path=account_file)
+        await page.close()
+        await context.close()
+        await browser.close()
+        return None
+
+
+# async def xiaohongshu_cookie_gen(account_file):
+#     async with async_playwright() as playwright:
+#         # 获取Chrome浏览器路径
+#         chrome_path = get_chrome_path()
+#         if chrome_path:
+#             xiaohongshu_logger.info(f'[+] 使用自动检测到的Chrome浏览器: {chrome_path}')
+#             browser = await playwright.chromium.launch(headless=LOCAL_CHROME_HEADLESS, executable_path=chrome_path)
+#         else:
+#             browser = await playwright.chromium.launch(headless=LOCAL_CHROME_HEADLESS)
+#         # Setup context however you like.
+#         context = await browser.new_context()  # Pass any options
+#         context = await set_init_script(context)
+#         # Pause the page, and start recording manually.
+#         page = await context.new_page()
+#         await page.goto("https://creator.xiaohongshu.com/")
+#         await page.pause()
+#         # 点击调试器的继续，保存cookie
+#         await context.storage_state(path=account_file)
 
 
 class XiaoHongShuVideo(object):
@@ -113,7 +173,12 @@ class XiaoHongShuVideo(object):
         self.publish_date = publish_date
         self.account_file = account_file
         self.date_format = '%Y年%m月%d日 %H:%M'
-        self.local_executable_path = LOCAL_CHROME_PATH
+        # 自动获取Chrome浏览器路径
+        self.local_executable_path = get_chrome_path()
+        if self.local_executable_path:
+            xiaohongshu_logger.info(f'[+] 自动检测到Chrome浏览器路径: {self.local_executable_path}')
+        else:
+            xiaohongshu_logger.warning('[!] 未检测到Chrome浏览器，将使用Playwright默认浏览器')
         self.headless = LOCAL_CHROME_HEADLESS
         self.thumbnail_path = thumbnail_path
 
