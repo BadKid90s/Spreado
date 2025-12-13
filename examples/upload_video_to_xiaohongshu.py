@@ -7,8 +7,8 @@ from utils.files_times import generate_schedule_time_next_day, get_title_and_has
 BASE_DIR = Path(__file__).parent.resolve()
 
 if __name__ == '__main__':
-    filepath = Path(BASE_DIR) / "videos"
-    account_file = Path(BASE_DIR / "cookies" / "xiaohongshu_uploader" / "account.json")
+    filepath = Path(BASE_DIR) / "examples" / "videos"
+    account_file = Path(BASE_DIR / "examples" / "cookies" / "xiaohongshu_uploader" / "account.json")
     # 获取视频目录
     folder_path = Path(filepath)
     # 获取文件夹中的所有文件
