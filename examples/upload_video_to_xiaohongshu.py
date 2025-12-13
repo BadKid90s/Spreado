@@ -1,10 +1,10 @@
 import asyncio
 from pathlib import Path
 
-from conf import BASE_DIR
 from uploader.xiaohongshu_uploader.main import xiaohongshu_setup, XiaoHongShuVideo
 from utils.files_times import generate_schedule_time_next_day, get_title_and_hashtags
 
+BASE_DIR = Path(__file__).parent.resolve()
 
 if __name__ == '__main__':
     filepath = Path(BASE_DIR) / "videos"

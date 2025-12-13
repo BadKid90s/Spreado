@@ -6,7 +6,7 @@ import os
 import asyncio
 import platform
 
-from conf import LOCAL_CHROME_HEADLESS,USE_LOCAL_BROWSER
+from conf import LOCAL_CHROME_HEADLESS
 from utils.base_social_media import set_init_script
 from utils.log import xiaohongshu_logger
 
@@ -125,8 +125,7 @@ async def xiaohongshu_cookie_gen(account_file):
         original_url = page.url
         print("✅ 图片地址:", src)
         # 监听页面的 'framenavigated' 事件，只关注主框架的变化
-        page.on('framenavigated',
-                lambda frame: asyncio.create_task(on_url_change()) if frame == page.main_frame else None)
+        page.on('framenavigated', lambda frame: asyncio.create_task(on_url_change()) if frame == page.main_frame else None)
 
         try:
             # 等待 URL 变化或超时
