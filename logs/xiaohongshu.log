@@ -1,0 +1,8 @@
+2025-12-13 08:30:15.214 | INFO     | uploader.xiaohongshu_uploader.main:upload:208 - [+]正在上传-------男子为了心爱之人每天坚守❤️‍🩹.mp4
+2025-12-13 08:30:15.215 | INFO     | uploader.xiaohongshu_uploader.main:upload:210 - [-] 正在打开主页...
+2025-12-13 08:30:30.392 | INFO     | uploader.xiaohongshu_uploader.main:upload:233 - [+] 检测到上传成功标识!
+2025-12-13 08:30:31.393 | INFO     | uploader.xiaohongshu_uploader.main:upload:248 -   [-] 正在填充标题和话题...
+2025-12-13 08:30:31.440 | INFO     | uploader.xiaohongshu_uploader.main:upload:264 - 总共添加1个话题
+2025-12-13 08:30:33.477 | SUCCESS  | uploader.xiaohongshu_uploader.main:upload:314 -   [-]视频发布成功
+2025-12-13 08:30:33.486 | SUCCESS  | uploader.xiaohongshu_uploader.main:upload:322 -   [-]cookie更新完毕！
+2025-12-13 08:32:22.154 | INFO     | uploader.xiaohongshu_uploader.main:xiaohongshu_setup:125 - [+] cookie文件不存在或已失效，即将自动打开浏览器，请扫码登录，登陆后会自动生成cookie文件
