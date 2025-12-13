@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime
 
-from playwright.async_api import Playwright, async_playwright, Page, BrowserContext
+from anyio import Path
+from playwright.async_api import Playwright, async_playwright, Page
 import os
 import asyncio
 import platform
+from typing import Optional, List
 
 from conf import LOCAL_CHROME_HEADLESS
 from utils.base_social_media import set_init_script
@@ -54,6 +56,7 @@ def get_chrome_path():
         return None
 
     return None
+
 
 async def cookie_auth(account_file):
     async with async_playwright() as playwright:
@@ -125,7 +128,8 @@ async def xiaohongshu_cookie_gen(account_file):
         original_url = page.url
         print("✅ 图片地址:", src)
         # 监听页面的 'framenavigated' 事件，只关注主框架的变化
-        page.on('framenavigated', lambda frame: asyncio.create_task(on_url_change()) if frame == page.main_frame else None)
+        page.on('framenavigated',
+                lambda frame: asyncio.create_task(on_url_change()) if frame == page.main_frame else None)
 
         try:
             # 等待 URL 变化或超时
@@ -144,42 +148,24 @@ async def xiaohongshu_cookie_gen(account_file):
         return None
 
 
-# async def xiaohongshu_cookie_gen(account_file):
-#     async with async_playwright() as playwright:
-#         # 获取Chrome浏览器路径
-#         chrome_path = get_chrome_path()
-#         if chrome_path:
-#             xiaohongshu_logger.info(f'[+] 使用自动检测到的Chrome浏览器: {chrome_path}')
-#             browser = await playwright.chromium.launch(headless=LOCAL_CHROME_HEADLESS, executable_path=chrome_path)
-#         else:
-#             browser = await playwright.chromium.launch(headless=LOCAL_CHROME_HEADLESS)
-#         # Setup context however you like.
-#         context = await browser.new_context()  # Pass any options
-#         context = await set_init_script(context)
-#         # Pause the page, and start recording manually.
-#         page = await context.new_page()
-#         await page.goto("https://creator.xiaohongshu.com/")
-#         await page.pause()
-#         # 点击调试器的继续，保存cookie
-#         await context.storage_state(path=account_file)
-
-
 class XiaoHongShuVideo(object):
-    def __init__(self, title, file_path, tags, publish_date: datetime, account_file, thumbnail_path=None):
-        self.title = title  # 视频标题
-        self.file_path = file_path
-        self.tags = tags
-        self.publish_date = publish_date
-        self.account_file = account_file
-        self.date_format = '%Y年%m月%d日 %H:%M'
+    def __init__(self, title: str, content: str, tags: List[str], file_path: str | Path, publish_date: datetime,
+                 account_file: str, thumbnail_path: Optional[str] = None):
+        self.title: str = title  # 视频标题
+        self.content: str = content
+        self.tags: List[str] = tags
+        self.file_path: str = file_path
+        self.publish_date: datetime = publish_date
+        self.account_file: str = account_file
+        self.date_format: str = '%Y年%m月%d日 %H:%M'
         # 自动获取Chrome浏览器路径
-        self.local_executable_path = get_chrome_path()
+        self.local_executable_path: Optional[str] = get_chrome_path()
         if self.local_executable_path:
             xiaohongshu_logger.info(f'[+] 自动检测到Chrome浏览器路径: {self.local_executable_path}')
         else:
             xiaohongshu_logger.warning('[!] 未检测到Chrome浏览器，将使用Playwright默认浏览器')
-        self.headless = LOCAL_CHROME_HEADLESS
-        self.thumbnail_path = thumbnail_path
+        self.headless: bool = LOCAL_CHROME_HEADLESS
+        self.thumbnail_path: Optional[str] = thumbnail_path
 
     async def set_schedule_time_xiaohongshu(self, page, publish_date):
         print("  [-] 正在设置定时发布时间...")
@@ -215,7 +201,8 @@ class XiaoHongShuVideo(object):
     async def upload(self, playwright: Playwright) -> None:
         # 使用 Chromium 浏览器启动一个浏览器实例
         if self.local_executable_path:
-            browser = await playwright.chromium.launch(headless=self.headless, executable_path=self.local_executable_path)
+            browser = await playwright.chromium.launch(headless=self.headless,
+                                                       executable_path=self.local_executable_path)
         else:
             browser = await playwright.chromium.launch(headless=self.headless)
         # 创建一个浏览器上下文，使用指定的 cookie 文件
@@ -265,60 +252,49 @@ class XiaoHongShuVideo(object):
                 print(f"  [-] 检测过程出错: {str(e)}，重新尝试...")
                 await asyncio.sleep(0.5)  # 等待0.5秒后重新尝试
 
-        # 填充标题和话题
-        # 检查是否存在包含输入框的元素
-        # 这里为了避免页面变化，故使用相对位置定位：作品标题父级右侧第一个元素的input子元素
         await asyncio.sleep(1)
         xiaohongshu_logger.info(f'  [-] 正在填充标题和话题...')
-        title_container = page.locator('div.plugin.title-container').locator('input.d-text')
+        title_container = page.locator("input[placeholder*='填写标题']")
+        # title_container = page.locator("input[placeholder='填写标题会有更多赞哦']")
         if await title_container.count():
-            await title_container.fill(self.title[:30])
+            await title_container.fill(self.title[:20])
         else:
-            titlecontainer = page.locator(".notranslate")
-            await titlecontainer.click()
+            title_container2 = page.locator(".notranslate")
+            await title_container2.click()
             await page.keyboard.press("Backspace")
             await page.keyboard.press("Control+KeyA")
             await page.keyboard.press("Delete")
             await page.keyboard.type(self.title)
             await page.keyboard.press("Enter")
-        css_selector = ".edit-container" # 不能加上 .ql-blank 属性，这样只能获取第一次非空状态
+
+        # 将标签也添加到正文描述中（通过模拟用户输入方式添加话题）
+        description_selector = "div.tiptap-container div[contenteditable]"
+        desc_element = page.locator(description_selector)
+        await desc_element.click()
+
+        # 添加内容文本
+        await desc_element.type(self.content)
+
+        # 添加换行，然后添加标签
+        await desc_element.press("End")
+        await desc_element.type("\n")
+
+        # 通过模拟用户输入 # 和标签名，然后选择下拉的话题选项来添加话题标签
         for index, tag in enumerate(self.tags, start=1):
-            await page.type(css_selector, "#" + tag)
-            await page.press(css_selector, "Space")
-        xiaohongshu_logger.info(f'总共添加{len(self.tags)}个话题')
+            # 移除标签中的 # 号（如果有的话），因为我们要通过输入 # 来触发话题选择
+            clean_tag = tag.lstrip("#")
+            # 输入 # 号触发话题选择
+            await desc_element.type("#")
+            # 输入标签名
+            await desc_element.type(clean_tag)
+            # 等待下拉选项出现
+            await page.wait_for_timeout(1000)
+            # 按下回车键选择第一个匹配的话题
+            await desc_element.press("Enter")
+            # 添加空格分隔
+            await desc_element.type(" ")
 
-        # while True:
-        #     # 判断重新上传按钮是否存在，如果不存在，代表视频正在上传，则等待
-        #     try:
-        #         #  新版：定位重新上传
-        #         number = await page.locator('[class^="long-card"] div:has-text("重新上传")').count()
-        #         if number > 0:
-        #             xiaohongshu_logger.success("  [-]视频上传完毕")
-        #             break
-        #         else:
-        #             xiaohongshu_logger.info("  [-] 正在上传视频中...")
-        #             await asyncio.sleep(2)
-
-        #             if await page.locator('div.progress-div > div:has-text("上传失败")').count():
-        #                 xiaohongshu_logger.error("  [-] 发现上传出错了... 准备重试")
-        #                 await self.handle_upload_error(page)
-        #     except:
-        #         xiaohongshu_logger.info("  [-] 正在上传视频中...")
-        #         await asyncio.sleep(2)
-        
-        # 上传视频封面
-        # await self.set_thumbnail(page, self.thumbnail_path)
-
-        # 更换可见元素
-        # await self.set_location(page, "青岛市")
-
-        # # 頭條/西瓜
-        # third_part_element = '[class^="info"] > [class^="first-part"] div div.semi-switch'
-        # # 定位是否有第三方平台
-        # if await page.locator(third_part_element).count():
-        #     # 检测是否是已选中状态
-        #     if 'semi-switch-checked' not in await page.eval_on_selector(third_part_element, 'div => div.className'):
-        #         await page.locator(third_part_element).locator('input.semi-switch-native-control').click()
+        xiaohongshu_logger.info(f'标签已添加到正文描述中')
 
         if self.publish_date != 0:
             await self.set_schedule_time_xiaohongshu(page, self.publish_date)
@@ -348,7 +324,7 @@ class XiaoHongShuVideo(object):
         # 关闭浏览器上下文和浏览器实例
         await context.close()
         await browser.close()
-    
+
     async def set_thumbnail(self, page: Page, thumbnail_path: str):
         if thumbnail_path:
             await page.click('text="选择封面"')
@@ -356,30 +332,27 @@ class XiaoHongShuVideo(object):
             await page.click('text="设置竖封面"')
             await page.wait_for_timeout(2000)  # 等待2秒
             # 定位到上传区域并点击
-            await page.locator("div[class^='semi-upload upload'] >> input.semi-upload-hidden-input").set_input_files(thumbnail_path)
+            await page.locator("div[class^='semi-upload upload'] >> input.semi-upload-hidden-input").set_input_files(
+                thumbnail_path)
             await page.wait_for_timeout(2000)  # 等待2秒
             await page.locator("div[class^='extractFooter'] button:visible:has-text('完成')").click()
-            # finish_confirm_element = page.locator("div[class^='confirmBtn'] >> div:has-text('完成')")
-            # if await finish_confirm_element.count():
-            #     await finish_confirm_element.click()
-            # await page.locator("div[class^='footer'] button:has-text('完成')").click()
 
     async def set_location(self, page: Page, location: str = "青岛市"):
         print(f"开始设置位置: {location}")
-        
+
         # 点击地点输入框
         print("等待地点输入框加载...")
         loc_ele = await page.wait_for_selector('div.d-text.d-select-placeholder.d-text-ellipsis.d-text-nowrap')
         print(f"已定位到地点输入框: {loc_ele}")
         await loc_ele.click()
         print("点击地点输入框完成")
-        
+
         # 输入位置名称
         print(f"等待1秒后输入位置名称: {location}")
         await page.wait_for_timeout(1000)
         await page.keyboard.type(location)
         print(f"位置名称输入完成: {location}")
-        
+
         # 等待下拉列表加载
         print("等待下拉列表加载...")
         dropdown_selector = 'div.d-popover.d-popover-default.d-dropdown.--size-min-width-large'
@@ -389,11 +362,11 @@ class XiaoHongShuVideo(object):
             print("下拉列表已加载")
         except:
             print("下拉列表未按预期显示，可能结构已变化")
-        
+
         # 增加等待时间以确保内容加载完成
         print("额外等待1秒确保内容渲染完成...")
         await page.wait_for_timeout(1000)
-        
+
         # 尝试更灵活的XPath选择器
         print("尝试使用更灵活的XPath选择器...")
         flexible_xpath = (
@@ -403,7 +376,7 @@ class XiaoHongShuVideo(object):
             f'//div[contains(@class, "name") and text()="{location}"]'
         )
         await page.wait_for_timeout(3000)
-        
+
         # 尝试定位元素
         print(f"尝试定位包含'{location}'的选项...")
         try:
@@ -412,7 +385,7 @@ class XiaoHongShuVideo(object):
                 flexible_xpath,
                 timeout=3000
             )
-            
+
             if location_option:
                 print(f"使用灵活选择器定位成功: {location_option}")
             else:
@@ -425,25 +398,25 @@ class XiaoHongShuVideo(object):
                     f'/div[1]//div[contains(@class, "name") and text()="{location}"]',
                     timeout=2000
                 )
-            
+
             # 滚动到元素并点击
             print("滚动到目标选项...")
             await location_option.scroll_into_view_if_needed()
             print("元素已滚动到视图内")
-            
+
             # 增加元素可见性检查
             is_visible = await location_option.is_visible()
             print(f"目标选项是否可见: {is_visible}")
-            
+
             # 点击元素
             print("准备点击目标选项...")
             await location_option.click()
             print(f"成功选择位置: {location}")
             return True
-            
+
         except Exception as e:
             print(f"定位位置失败: {e}")
-            
+
             # 打印更多调试信息
             print("尝试获取下拉列表中的所有选项...")
             try:
@@ -454,15 +427,15 @@ class XiaoHongShuVideo(object):
                     '/div'
                 )
                 print(f"找到 {len(all_options)} 个选项")
-                
+
                 # 打印前3个选项的文本内容
                 for i, option in enumerate(all_options[:3]):
                     option_text = await option.inner_text()
-                    print(f"选项 {i+1}: {option_text.strip()[:50]}...")
-                    
+                    print(f"选项 {i + 1}: {option_text.strip()[:50]}...")
+
             except Exception as e:
                 print(f"获取选项列表失败: {e}")
-                
+
             # 截图保存（取消注释使用）
             # await page.screenshot(path=f"location_error_{location}.png")
             return False
@@ -470,5 +443,3 @@ class XiaoHongShuVideo(object):
     async def main(self):
         async with async_playwright() as playwright:
             await self.upload(playwright)
-
-

@@ -33,12 +33,20 @@ def get_title_and_hashtags(filename):
     # 获取标题和 hashtag
     splite_str = content.strip().split("\n")
     title = splite_str[0]
-    hashtags = splite_str[1].replace("#", "").split(" ")
+    content = splite_str[1]
+    hashtags = splite_str[2]
 
-    return title, hashtags
+    # 将标签字符串分割成列表
+    # 支持空格和中文逗号分隔
+    import re
+    tags = re.split(r'[,，\s]+', hashtags.strip())
+    # 过滤空字符串
+    tags = [tag for tag in tags if tag]
+
+    return title, content, tags
 
 
-def generate_schedule_time_next_day(total_videos, videos_per_day = 1, daily_times=None, timestamps=False, start_days=0):
+def generate_schedule_time_next_day(total_videos, videos_per_day=1, daily_times=None, timestamps=False, start_days=0):
     """
     Generate a schedule for video uploads, starting from the next day.
 
@@ -81,3 +89,9 @@ def generate_schedule_time_next_day(total_videos, videos_per_day = 1, daily_time
     if timestamps:
         schedule = [int(time.timestamp()) for time in schedule]
     return schedule
+
+
+if __name__ == '__main__':
+    title, tags = get_title_and_hashtags("/Users/wry/PycharmProjects/uploader/examples/videos/demo.txt")
+    print(f"标题：{title}")
+    print(f"Hashtag：{tags}")

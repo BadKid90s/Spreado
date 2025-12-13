@@ -17,7 +17,7 @@ if __name__ == '__main__':
     publish_datetimes = generate_schedule_time_next_day(file_num, 1, daily_times=[16])
     cookie_setup = asyncio.run(xiaohongshu_setup(account_file, handle=False))
     for index, file in enumerate(files):
-        title, tags = get_title_and_hashtags(str(file))
+        title, content, tags = get_title_and_hashtags(str(file))
         thumbnail_path = file.with_suffix('.png')
         # 打印视频文件名、标题和 hashtag
         print(f"视频文件名：{file}")
@@ -25,7 +25,7 @@ if __name__ == '__main__':
         print(f"Hashtag：{tags}")
         # 暂时没有时间修复封面上传，故先隐藏掉该功能
         # if thumbnail_path.exists():
-            # app = XiaoHongShuVideo(title, file, tags, publish_datetimes[index], account_file, thumbnail_path=thumbnail_path)
+        # app = XiaoHongShuVideo(title, file, tags, publish_datetimes[index], account_file, thumbnail_path=thumbnail_path)
         # else:
-        app = XiaoHongShuVideo(title, file, tags, 0, account_file)
+        app = XiaoHongShuVideo(title, content, tags, file, 0, account_file)
         asyncio.run(app.main(), debug=False)
