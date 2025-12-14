@@ -284,9 +284,9 @@ class DouYinVideo(object):
         # 方法： 等待页面出现"重新上传"按钮
         while True:
             try:
-                # 更精确地定位重新上传按钮，根据提供的HTML结构
-                await page.locator('.preview-button-r8SQPD:has(.text-JK4gL5:has-text("重新上传"))').wait_for(
-                    timeout=3000)
+                # 定位重新上传按钮，支持preview-button-样式类名的模糊匹配
+                await (page.locator("div[class*='preview-button-']:has(div:text('重新上传'))")
+                .wait_for(timeout=3000))
                 # 如果找到了"重新上传"按钮，说明上传完成
                 douyin_logger.info(f'视频上传完成...')
                 break
