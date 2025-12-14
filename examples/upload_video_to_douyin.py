@@ -7,18 +7,31 @@ from utils.files_times import generate_schedule_time_next_day, get_title_and_has
 
 if __name__ == '__main__':
     filepath = Path(BASE_DIR) / "examples" / "videos"
-    account_file = Path(BASE_DIR  / "cookies" / "douyin_uploader" / "account.json")
-    # 获取视频目录
-    folder_path = Path(filepath)
-    # 获取文件夹中的所有文件
-    files = list(folder_path.glob("*.mp4"))
-    file_num = len(files)
+    account_file = Path(BASE_DIR / "cookies" / "douyin_uploader" / "account.json")
     cookie_setup = asyncio.run(douyin_setup(account_file, handle=False))
-    for index, file in enumerate(files):
-        title, content, tags = get_title_and_hashtags(str(file))
-        # 打印视频文件名、标题和 hashtag
-        print(f"视频文件名：{file}")
-        print(f"标题：{title}")
-        print(f"Hashtag：{tags}")
-        app = DouYinVideo(title, content, tags, file, account_file)
-        asyncio.run(app.main(), debug=False)
+
+    # 使用固定路径的demo文件
+    folder_path = Path(filepath)
+    file_path = folder_path / "demo.mp4"
+    thumbnail_path = folder_path / "demo.png"
+    txt_path = folder_path / "demo.txt"
+
+    title, content, tags = get_title_and_hashtags(str(txt_path))
+    # 打印视频文件信息
+    print(f"视频文件名：{file_path}")
+    print(f"标题：{title}")
+    print(f"Hashtag：{tags}")
+
+    # 设置发布时间为当前时间1小时后
+    from datetime import datetime, timedelta
+    publish_time = datetime.now() + timedelta(hours=2)
+
+    app = DouYinVideo(title=title,
+                      content=content,
+                      tags=tags,
+                      file_path=file_path,
+                      account_file=account_file,
+                      publish_date=publish_time,
+                      thumbnail_path=thumbnail_path,
+                      )
+    asyncio.run(app.main(), debug=False)
