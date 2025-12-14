@@ -149,8 +149,8 @@ async def xiaohongshu_cookie_gen(account_file):
 
 
 class XiaoHongShuVideo(object):
-    def __init__(self, title: str, content: str, tags: List[str], file_path: str | Path, publish_date: datetime,
-                 account_file: str, thumbnail_path: Optional[str] = None):
+    def __init__(self, title: str, content: str, tags: List[str], file_path: str | Path, account_file: str | Path,
+                 publish_date: datetime = None, thumbnail_path: Optional[str] = None):
         self.title: str = title  # 视频标题
         self.content: str = content
         self.tags: List[str] = tags
@@ -296,14 +296,14 @@ class XiaoHongShuVideo(object):
 
         xiaohongshu_logger.info(f'标签已添加到正文描述中')
 
-        if self.publish_date != 0:
+        if self.publish_date is not None:
             await self.set_schedule_time_xiaohongshu(page, self.publish_date)
 
         # 判断视频是否发布成功
         while True:
             try:
                 # 等待包含"定时发布"文本的button元素出现并点击
-                if self.publish_date != 0:
+                if self.publish_date is not None:
                     await page.locator('button:has-text("定时发布")').click()
                 else:
                     await page.locator('button:has-text("发布")').click()

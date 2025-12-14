@@ -167,8 +167,8 @@ async def weixin_setup(account_file, handle=False):
 
 class TencentVideo(object):
 
-    def __init__(self, title: str, content: str, tags: List[str], file_path: str | Path, publish_date: datetime,
-                 account_file: str | Path, category: bool = None, is_draft: bool = False):
+    def __init__(self, title: str, content: str, tags: List[str], file_path: str | Path, account_file: str | Path,
+                 publish_date: datetime = None, category: bool = None, is_draft: bool = False):
         self.title = title  # 视频标题
         self.content = content
         self.tags = tags
@@ -258,7 +258,7 @@ class TencentVideo(object):
         await self.add_original(page)
         # 检测上传状态
         await self.detect_upload_status(page)
-        if self.publish_date != 0:
+        if self.publish_date is not None:
             await self.set_schedule_time_tencent(page, self.publish_date)
         # 添加短标题
         await self.add_short_title(page)

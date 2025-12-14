@@ -22,5 +22,5 @@ if __name__ == '__main__':
         print(f"视频文件名：{file}")
         print(f"标题：{title}")
         print(f"Hashtag：{tags}")
-        app = TencentVideo(title, content, tags, file, 0, account_file, category)
+        app = TencentVideo(title, content, tags, file, account_file)
         asyncio.run(app.main(), debug=False)

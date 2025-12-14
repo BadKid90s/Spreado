@@ -147,8 +147,8 @@ async def douyin_cookie_gen(account_file):
 
 
 class DouYinVideo(object):
-    def __init__(self, title: str, content: str, tags: List[str], file_path: str | Path, publish_date: datetime,
-                 account_file: str, thumbnail_path: Optional[str] = None, ):
+    def __init__(self, title: str, content: str, tags: List[str], file_path: str | Path, account_file: str | Path, 
+                 publish_date: datetime = None, thumbnail_path: Optional[str] = None):
         self.title = title  # 视频标题
         self.content = content
         self.tags = tags
@@ -272,7 +272,7 @@ class DouYinVideo(object):
             if 'semi-switch-checked' not in await page.eval_on_selector(third_part_element, 'div => div.className'):
                 await page.locator(third_part_element).locator('input.semi-switch-native-control').click()
 
-        if self.publish_date != 0:
+        if self.publish_date is not None:
             await self.set_schedule_time_douyin(page, self.publish_date)
 
         # 等待上传完成，通过检测页面元素判断
