@@ -150,7 +150,7 @@ async def xiaohongshu_cookie_gen(account_file):
 
 class XiaoHongShuVideo(object):
     def __init__(self, title: str, content: str, tags: List[str], file_path: str | Path, account_file: str | Path,
-                 publish_date: datetime = None, thumbnail_path: Optional[str] = None):
+                 publish_date: datetime = None, thumbnail_path: str | Path = None):
         self.title: str = title  # 视频标题
         self.content: str = content
         self.tags: List[str] = tags
@@ -165,7 +165,7 @@ class XiaoHongShuVideo(object):
         else:
             xiaohongshu_logger.warning('[!] 未检测到Chrome浏览器，将使用Playwright默认浏览器')
         self.headless: bool = LOCAL_CHROME_HEADLESS
-        self.thumbnail_path: Optional[str] = thumbnail_path
+        self.thumbnail_path=thumbnail_path
 
     async def set_schedule_time_xiaohongshu(self, page, publish_date):
         print("  [-] 正在设置定时发布时间...")
@@ -295,6 +295,9 @@ class XiaoHongShuVideo(object):
             await desc_element.type(" ")
 
         xiaohongshu_logger.info(f'标签已添加到正文描述中')
+
+        # 设置封面
+        await self.set_thumbnail(page, self.thumbnail_path)
 
         if self.publish_date is not None:
             await self.set_schedule_time_xiaohongshu(page, self.publish_date)
