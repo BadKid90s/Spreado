@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime
+from typing import List
 
+from anyio import Path
 from playwright.async_api import Playwright, async_playwright
 import os
 import asyncio
@@ -130,9 +132,10 @@ async def get_tencent_cookie(account_file):
         page = await context.new_page()
         await page.goto("https://channels.weixin.qq.com")
         original_url = page.url
-        
+
         # 监听页面的 'framenavigated' 事件，只关注主框架的变化
-        page.on('framenavigated', lambda frame: asyncio.create_task(on_url_change()) if frame == page.main_frame else None)
+        page.on('framenavigated',
+                lambda frame: asyncio.create_task(on_url_change()) if frame == page.main_frame else None)
 
         try:
             # 等待 URL 变化或超时
@@ -163,10 +166,13 @@ async def weixin_setup(account_file, handle=False):
 
 
 class TencentVideo(object):
-    def __init__(self, title, file_path, tags, publish_date: datetime, account_file, category=None, is_draft=False):
+
+    def __init__(self, title: str, content: str, tags: List[str], file_path: str | Path, publish_date: datetime,
+                 account_file: str | Path, category: bool = None, is_draft: bool = False):
         self.title = title  # 视频标题
-        self.file_path = file_path
+        self.content = content
         self.tags = tags
+        self.file_path = file_path
         self.publish_date = publish_date
         self.account_file = account_file
         self.category = category
@@ -224,7 +230,8 @@ class TencentVideo(object):
     async def upload(self, playwright: Playwright) -> None:
         # 使用 Chromium (这里使用系统内浏览器，用chromium 会造成h264错误
         if self.local_executable_path:
-            browser = await playwright.chromium.launch(headless=self.headless, executable_path=self.local_executable_path)
+            browser = await playwright.chromium.launch(headless=self.headless,
+                                                       executable_path=self.local_executable_path)
         else:
             browser = await playwright.chromium.launch(headless=self.headless)
         # 创建一个浏览器上下文，使用指定的 cookie 文件
@@ -333,6 +340,11 @@ class TencentVideo(object):
         await page.locator("div.input-editor").click()
         await page.keyboard.type(self.title)
         await page.keyboard.press("Enter")
+
+        # 添加内容文本
+        await page.keyboard.type(self.content)
+        await page.keyboard.press("Enter")
+
         for index, tag in enumerate(self.tags, start=1):
             # 检查标签是否已包含#号，避免重复添加
             if not tag.startswith("#"):
