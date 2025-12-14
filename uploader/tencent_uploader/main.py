@@ -168,13 +168,15 @@ async def weixin_setup(account_file, handle=False):
 class TencentVideo(object):
 
     def __init__(self, title: str, content: str, tags: List[str], file_path: str | Path, account_file: str | Path,
-                 publish_date: datetime = None, category: bool = None, is_draft: bool = False):
+                 publish_date: datetime = None, thumbnail_path: str | Path = None, category: str = None,
+                 is_draft: bool = False):
         self.title = title  # 视频标题
         self.content = content
         self.tags = tags
         self.file_path = file_path
         self.publish_date = publish_date
         self.account_file = account_file
+        self.thumbnail_path = thumbnail_path
         self.category = category
         self.headless = LOCAL_CHROME_HEADLESS
         self.is_draft = is_draft  # 是否保存为草稿
@@ -250,6 +252,8 @@ class TencentVideo(object):
         await file_input.set_input_files(self.file_path)
         # 填充标题和话题
         await self.add_title_tags(page)
+        # 添加封面
+        await self.add_thumbnail(page)
         # 添加商品
         # await self.add_product(page)
         # 合集功能
@@ -267,7 +271,6 @@ class TencentVideo(object):
 
         await context.storage_state(path=f"{self.account_file}")  # 保存cookie
         tencent_logger.success('  [-]cookie更新完毕！')
-        await asyncio.sleep(2)  # 这里延迟是为了方便眼睛直观的观看
         # 关闭浏览器上下文和浏览器实例
         await context.close()
         await browser.close()
@@ -384,6 +387,23 @@ class TencentVideo(object):
                 await page.wait_for_timeout(1000)
             if await page.locator('button:has-text("声明原创"):visible').count():
                 await page.locator('button:has-text("声明原创"):visible').click()
+    async def add_thumbnail(self, page):
+        if self.thumbnail_path:
+            tencent_logger.info('  [-] 正在设置视频封面...')
+            await page.click('text="个人主页卡片"')
+            await page.wait_for_selector("div.weui-desktop-dialog:has(*:text('编辑个人主页卡片'))")
+            # 点击包含"上传封面"文本的父元素
+            await page.locator('div:has-text("上传封面"):visible').first.click()
+            await page.wait_for_timeout(1000)  # 等待1秒
+            # 定位到single-cover-uploader-wrap下的input输入框并设置文件
+            await page.locator('div.single-cover-uploader-wrap input[type="file"]').set_input_files(self.thumbnail_path)
+            await page.wait_for_timeout(1000)  # 等待1秒
+            # 点击裁剪封面图对话框中的"确认"按钮
+            await page.locator("button:visible:has-text('确认')").click()
+            tencent_logger.info('  [+] 视频封面设置完成！')
+            # 等待封面设置对话框关闭
+            await page.wait_for_selector("div.extractFooter", state='detached')
+
 
     async def main(self):
         async with async_playwright() as playwright:
