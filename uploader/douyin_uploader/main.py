@@ -275,23 +275,28 @@ class DouYinVideo(object):
         if self.publish_date != 0:
             await self.set_schedule_time_douyin(page, self.publish_date)
 
-        # 判断视频是否发布成功
+        # 等待上传完成，通过检测页面元素判断
+        # 方法： 等待页面出现"重新上传"按钮
         while True:
-            # 判断视频是否发布成功
             try:
-                publish_button = page.get_by_role('button', name="发布", exact=True)
-                if await publish_button.count():
-                    await publish_button.click()
-                await page.wait_for_url("https://creator.douyin.com/creator-micro/content/manage**",
-                                        timeout=3000)  # 如果自动跳转到作品页面，则代表发布成功
-                douyin_logger.success("  [-]视频发布成功")
+                # 更精确地定位重新上传按钮，根据提供的HTML结构
+                await page.locator('.preview-button-r8SQPD:has(.text-JK4gL5:has-text("重新上传"))').wait_for(timeout=3000)
+                # 如果找到了"重新上传"按钮，说明上传完成
+                douyin_logger.info(f'视频上传完成...')
                 break
-            except:
-                # 尝试处理封面问题
-                await self.handle_auto_video_cover(page)
-                douyin_logger.info("  [-] 视频正在发布中...")
-                await page.screenshot(full_page=True)
-                await asyncio.sleep(0.5)
+            except Exception:
+                douyin_logger.info(f'等待视频上传完成...')
+                # 继续等待
+                await asyncio.sleep(1)
+
+        # 点击发布按钮
+        publish_button = page.get_by_role('button', name="发布", exact=True)
+        if await publish_button.count():
+            await publish_button.click()
+        await page.wait_for_url("https://creator.douyin.com/creator-micro/content/manage**",
+                                timeout=3000)  # 如果自动跳转到作品页面，则代表发布成功
+        douyin_logger.success("  [-]视频发布成功")
+
 
         await context.storage_state(path=self.account_file)  # 保存cookie
         douyin_logger.success('  [-]cookie更新完毕！')
