@@ -69,7 +69,112 @@ def process_video_file(video_file_obj):
         return "", "", ""
 
 
-# 模拟发布函数 - 实际使用时替换为真实的发布逻辑
+# 模拟发布函数 - 实际使用时替换为真实的发布逻辑（生成器版本，用于实时日志）
+def publish_to_platform_generator(platform, video_path, title, description, tags, scheduled_time=None, thumbnail_path=None):
+    """发布到各平台的函数（生成器版本，用于实时日志）"""
+    result = f"  📝 标题: {title}\n"
+    result += f"  📄 描述: {description}\n"
+    result += f"  🏷️ 标签: {', '.join(tags)}\n"
+    if scheduled_time:
+        result += f"  🕒 定时发布: {scheduled_time}\n"
+    if thumbnail_path:
+        result += f"  🖼️ 封面图: {os.path.basename(thumbnail_path)}\n"
+    
+    # 添加一个空行分隔符，使日志更清晰
+    result += "\n"
+    yield result
+
+    # 处理publish_date参数
+    # 数据类型转换和验证
+    try:
+        if scheduled_time:
+            # 验证scheduled_time是否为有效的时间格式
+            if isinstance(scheduled_time, str):
+                # 如果是字符串，尝试解析为datetime对象
+                try:
+                    publish_date = datetime.fromisoformat(scheduled_time.replace('Z', '+00:00'))
+                except ValueError:
+                    # 如果解析失败，设为None
+                    publish_date = None
+            elif isinstance(scheduled_time, (datetime,)):
+                # 如果已经是datetime对象，直接使用
+                publish_date = scheduled_time
+            else:
+                # 其他情况设为None
+                publish_date = None
+        else:
+            publish_date = None
+    except Exception:
+        # 如果出现任何异常，设为None
+        publish_date = None
+
+    # 根据平台类型调用不同的上传实现
+    if platform == "douyin" and DOUYIN_AVAILABLE:
+        try:
+            result += "➡️ 正在发布到抖音...\n"
+            yield result
+            # 创建抖音视频对象
+            douyin_video = DouYinVideo(
+                title=title,
+                content=description,
+                tags=tags,
+                file_path=Path(video_path),
+                account_file=str(Path(BASE_DIR) / "cookies" / "douyin_uploader" / "account.json"),
+                publish_date=publish_date
+            )
+            asyncio.run(douyin_video.main(), debug=False)
+            result += f"\n✅ 抖音发布成功!\n"
+            yield result
+        except Exception as e:
+            result += f"\n❌ 抖音发布失败: {str(e)}\n"
+            yield result
+    elif platform == "xiaohongshu" and XIAOHONGSHU_AVAILABLE:
+        try:
+            result += "➡️ 正在发布到小红书...\n"
+            yield result
+            # 创建小红书视频对象
+            xiaohongshu_video = XiaoHongShuVideo(
+                title=title,
+                content=description,
+                tags=tags,
+                file_path=Path(video_path),
+                account_file=str(Path(BASE_DIR) / "cookies" / "xiaohongshu_uploader" / "account.json"),
+                publish_date=publish_date
+            )
+            # 运行异步上传任务
+            asyncio.run(xiaohongshu_video.main())
+            result += f"\n✅ 小红书发布成功!\n"
+            yield result
+        except Exception as e:
+            result += f"\n❌ 小红书发布失败: {str(e)}\n"
+            yield result
+    elif platform == "tencent" and TENCENT_AVAILABLE:
+        try:
+            result += "➡️ 正在发布到腾讯视频号...\n"
+            yield result
+            # 创建腾讯视频号视频对象
+            tencent_video = TencentVideo(
+                title=title,
+                content=description,
+                tags=tags,
+                file_path=Path(video_path),
+                account_file=str(Path(BASE_DIR) / "cookies" / "tencent_uploader" / "account.json"),
+                publish_date=publish_date
+            )
+            # 运行异步上传任务
+            asyncio.run(tencent_video.main())
+            result += f"\n✅ 腾讯视频号发布成功!\n"
+            yield result
+        except Exception as e:
+            result += f"\n❌ 腾讯视频号发布失败: {str(e)}\n"
+            yield result
+    else:
+        # 这里可以添加快手和微信视频号的实现
+        result += f"\n✅ {platform}暂不支持发布哦！\n"
+        yield result
+
+
+# 模拟发布函数 - 实际使用时替换为真实的发布逻辑（兼容旧版本）
 def publish_to_platform(platform, video_path, title, description, tags, scheduled_time=None, thumbnail_path=None):
     """发布到各平台的函数"""
     result = f"  📝 标题: {title}\n"
@@ -159,7 +264,114 @@ def publish_to_platform(platform, video_path, title, description, tags, schedule
     return result
 
 
-# 主发布函数
+# 主发布函数（生成器版本，用于实时日志）
+def publish_video_generator(video_file_obj, thumbnail_file_obj, title, description, tags, scheduled_time, platforms):
+    """主发布函数（生成器版本，用于实时日志）"""
+    if not video_file_obj:
+        yield "❌ 请先上传视频文件"
+        return
+
+    # 处理标签
+    if tags:
+        # 分割标签，支持中英文逗号和空格
+        import re
+        tag_list = re.split(r'[,，\s]+', tags.strip())
+        # 过滤空标签并去除多余的#
+        tag_list = [tag.lstrip('#') for tag in tag_list if tag]
+    else:
+        tag_list = []
+
+    # 获取文件路径
+    # 处理不同类型的输入参数
+    if hasattr(video_file_obj, 'name'):
+        # 如果是文件对象，获取其name属性
+        video_path = video_file_obj.name
+    else:
+        # 如果是字符串路径，直接使用
+        video_path = video_file_obj
+    
+    # 处理缩略图路径
+    if thumbnail_file_obj:
+        if hasattr(thumbnail_file_obj, 'name'):
+            thumbnail_path = thumbnail_file_obj.name
+        else:
+            thumbnail_path = thumbnail_file_obj
+    else:
+        thumbnail_path = None
+
+    # 准备结果日志
+    log_result = f"🎬 开始发布视频: {os.path.basename(video_path)}\n\n"
+    yield log_result
+
+    # 发布到各平台
+    platform_display_mapping = {
+        "douyin": "抖音",
+        "xiaohongshu": "小红书",
+        "kuaishou": "快手",
+        "tencent": "微信视频号"
+    }
+
+    for platform_value in platforms:
+        if platform_value in platform_display_mapping:
+            display_name = platform_display_mapping[platform_value]
+            platform_start_marker = f"➡️ 正在发布到{display_name}..."
+            log_result += platform_start_marker + "\n"
+            yield log_result
+            
+            try:
+                # 使用生成器版本的发布函数以获得实时日志
+                last_partial_result = ""
+                for partial_result in publish_to_platform_generator(
+                    platform_value,
+                    video_path,
+                    title,
+                    description,
+                    tag_list,
+                    scheduled_time,
+                    thumbnail_path
+                ):
+                    last_partial_result = partial_result
+                
+                # 将最终的平台结果添加到总日志中
+                # 移除平台开始标记后的所有内容，然后添加最新的结果
+                lines = log_result.split('\n')
+                # 找到平台开始标记的位置
+                marker_index = -1
+                for i, line in enumerate(lines):
+                    if line == platform_start_marker:
+                        marker_index = i
+                        break
+                
+                if marker_index != -1:
+                    # 保留标记前的内容，替换标记后的内容
+                    new_lines = lines[:marker_index + 1]
+                    # 添加最新的平台结果（去掉开头的重复信息）
+                    platform_lines = last_partial_result.split('\n')
+                    # 找到平台相关信息的开始位置
+                    start_index = 0
+                    for i, line in enumerate(platform_lines):
+                        if line.startswith("  📝 标题:") or line.startswith("➡️ 正在发布到"):
+                            start_index = i
+                            break
+                    
+                    # 添加从平台相关信息开始的内容
+                    new_lines.extend(platform_lines[start_index:])
+                    log_result = '\n'.join(new_lines)
+                else:
+                    # 如果没找到标记，直接添加结果
+                    log_result += last_partial_result
+                
+                yield log_result
+            except Exception as e:
+                error_msg = f"❌ {display_name}发布失败: {str(e)}\n\n"
+                log_result += error_msg
+                yield log_result
+
+    log_result += "\n🎉 所有选定平台发布完成！"
+    yield log_result
+
+
+# 主发布函数（兼容旧版本）
 def publish_video(video_file_obj, thumbnail_file_obj, title, description, tags, scheduled_time, platforms):
     """主发布函数"""
     if not video_file_obj:
@@ -295,7 +507,7 @@ with gr.Blocks(title="多平台视频发布工具") as demo:
     )
 
     publish_btn.click(
-        fn=publish_video,
+        fn=publish_video_generator,
         inputs=[video_file, thumbnail_file, title, description, tags, scheduled_time, platforms],
         outputs=logs
     )
@@ -329,4 +541,4 @@ if __name__ == "__main__":
         }
     }
     """
-    demo.launch(server_name="0.0.0.0", server_port=7860, share=False, css=custom_css)
+    demo.launch(server_name="0.0.0.0", server_port=7861, share=False, css=custom_css)
