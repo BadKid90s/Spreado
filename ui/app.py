@@ -2,7 +2,7 @@ import gradio as gr
 import asyncio
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 # 添加项目根目录到 Python 路径
@@ -29,6 +29,14 @@ except ImportError:
     XIAOHONGSHU_AVAILABLE = False
     print("小红书上传模块不可用")
 
+try:
+    from uploader.tencent_uploader.main import TencentVideo
+
+    TENCENT_AVAILABLE = True
+except ImportError:
+    TENCENT_AVAILABLE = False
+    print("腾讯视频号上传模块不可用")
+
 
 # 处理视频文件上传并提取信息
 def process_video_file(video_file_obj):
@@ -38,7 +46,13 @@ def process_video_file(video_file_obj):
 
     try:
         # 获取视频文件路径
-        video_path = video_file_obj.name
+        # 处理不同类型的输入参数
+        if hasattr(video_file_obj, 'name'):
+            # 如果是文件对象，获取其name属性
+            video_path = video_file_obj.name
+        else:
+            # 如果是字符串路径，直接使用
+            video_path = video_file_obj
 
         # 查找同名的txt文件
         txt_path = video_path.rsplit('.', 1)[0] + '.txt'
@@ -58,9 +72,38 @@ def process_video_file(video_file_obj):
 # 模拟发布函数 - 实际使用时替换为真实的发布逻辑
 def publish_to_platform(platform, video_path, title, description, tags, scheduled_time=None, thumbnail_path=None):
     """发布到各平台的函数"""
-    import time
-    time.sleep(2)  # 模拟发布过程
-    
+    result = f"  📝 标题: {title}\n"
+    result += f"  📄 描述: {description}\n"
+    result += f"  🏷️ 标签: {', '.join(tags)}\n"
+    if scheduled_time:
+        result += f"  🕒 定时发布: {scheduled_time}\n"
+    if thumbnail_path:
+        result += f"  🖼️ 封面图: {os.path.basename(thumbnail_path)}\n"
+
+    # 处理publish_date参数
+    # 数据类型转换和验证
+    try:
+        if scheduled_time:
+            # 验证scheduled_time是否为有效的时间格式
+            if isinstance(scheduled_time, str):
+                # 如果是字符串，尝试解析为datetime对象
+                try:
+                    publish_date = datetime.fromisoformat(scheduled_time.replace('Z', '+00:00'))
+                except ValueError:
+                    # 如果解析失败，设为None
+                    publish_date = None
+            elif isinstance(scheduled_time, (datetime,)):
+                # 如果已经是datetime对象，直接使用
+                publish_date = scheduled_time
+            else:
+                # 其他情况设为None
+                publish_date = None
+        else:
+            publish_date = None
+    except Exception:
+        # 如果出现任何异常，设为None
+        publish_date = None
+
     # 根据平台类型调用不同的上传实现
     if platform == "douyin" and DOUYIN_AVAILABLE:
         try:
@@ -70,8 +113,8 @@ def publish_to_platform(platform, video_path, title, description, tags, schedule
                 content=description,
                 tags=tags,
                 file_path=Path(video_path),
-                publish_date=0,
-                account_file=str(Path(BASE_DIR) / "cookies" / "douyin_uploader" / "account.json")
+                account_file=str(Path(BASE_DIR) / "cookies" / "douyin_uploader" / "account.json"),
+                publish_date=publish_date
             )
             asyncio.run(douyin_video.main(), debug=False)
             result = f"✅ 抖音发布成功!\n"
@@ -85,25 +128,33 @@ def publish_to_platform(platform, video_path, title, description, tags, schedule
                 content=description,
                 tags=tags,
                 file_path=Path(video_path),
-                publish_date=0,
-                account_file=str(Path(BASE_DIR) / "cookies" / "xiaohongshu_uploader" / "account.json")
+                account_file=str(Path(BASE_DIR) / "cookies" / "xiaohongshu_uploader" / "account.json"),
+                publish_date=publish_date
             )
             # 运行异步上传任务
             asyncio.run(xiaohongshu_video.main())
             result = f"✅ 小红书发布成功!\n"
         except Exception as e:
             result = f"❌ 小红书发布失败: {str(e)}\n"
+    elif platform == "tencent" and TENCENT_AVAILABLE:
+        try:
+            # 创建腾讯视频号视频对象
+            tencent_video = TencentVideo(
+                title=title,
+                content=description,
+                tags=tags,
+                file_path=Path(video_path),
+                account_file=str(Path(BASE_DIR) / "cookies" / "tencent_uploader" / "account.json"),
+                publish_date=publish_date
+            )
+            # 运行异步上传任务
+            asyncio.run(tencent_video.main())
+            result = f"✅ 腾讯视频号发布成功!\n"
+        except Exception as e:
+            result = f"❌ 腾讯视频号发布失败: {str(e)}\n"
     else:
         # 这里可以添加快手和微信视频号的实现
-        result = f"✅ {platform}发布成功!\n"
-
-    result += f"  📝 标题: {title}\n"
-    result += f"  📄 描述: {description}\n"
-    result += f"  🏷️ 标签: {', '.join(tags)}\n"
-    if scheduled_time:
-        result += f"  🕒 定时发布: {scheduled_time}\n"
-    if thumbnail_path:
-        result += f"  🖼️ 封面图: {os.path.basename(thumbnail_path)}\n"
+        result = f"✅ {platform}暂不支持发布哦！\n"
 
     return result
 
@@ -125,8 +176,22 @@ def publish_video(video_file_obj, thumbnail_file_obj, title, description, tags, 
         tag_list = []
 
     # 获取文件路径
-    video_path = video_file_obj.name
-    thumbnail_path = thumbnail_file_obj.name if thumbnail_file_obj else None
+    # 处理不同类型的输入参数
+    if hasattr(video_file_obj, 'name'):
+        # 如果是文件对象，获取其name属性
+        video_path = video_file_obj.name
+    else:
+        # 如果是字符串路径，直接使用
+        video_path = video_file_obj
+    
+    # 处理缩略图路径
+    if thumbnail_file_obj:
+        if hasattr(thumbnail_file_obj, 'name'):
+            thumbnail_path = thumbnail_file_obj.name
+        else:
+            thumbnail_path = thumbnail_file_obj
+    else:
+        thumbnail_path = None
 
     # 准备结果日志
     log_result = f"🎬 开始发布视频: {os.path.basename(video_path)}\n\n"
@@ -136,7 +201,7 @@ def publish_video(video_file_obj, thumbnail_file_obj, title, description, tags, 
         "douyin": "抖音",
         "xiaohongshu": "小红书",
         "kuaishou": "快手",
-        "weixin_shipinhao": "微信视频号"
+        "tencent": "微信视频号"
     }
 
     for platform_value in platforms:
@@ -167,14 +232,13 @@ with gr.Blocks(title="多平台视频发布工具") as demo:
     gr.Markdown("支持抖音、小红书、快手、微信视频号等平台的视频发布")
 
     with gr.Row(elem_classes="upload-section"):
-        with gr.Column(scale=5,elem_classes="content-left"):
+        with gr.Column(scale=5, elem_classes="content-left"):
             # 视频上传组件
             video_file = gr.PlayableVideo(label="上传视频文件并预览", elem_classes="video-upload")
-        
-        with gr.Column(scale=5,elem_classes="content-right"):
+
+        with gr.Column(scale=5, elem_classes="content-right"):
             # 封面图片上传组件
             thumbnail_file = gr.Image(label="上传封面图(可选)", type="filepath", elem_classes="image-upload")
-
 
     # 标题输入
     title = gr.Textbox(label="视频标题", placeholder="请输入视频标题(建议15-30个字符)")
@@ -195,7 +259,7 @@ with gr.Blocks(title="多平台视频发布工具") as demo:
     platforms = gr.CheckboxGroup(
         label="选择发布平台",
         choices=[("抖音", "douyin"), ("小红书", "xiaohongshu"), ("快手", "kuaishou"),
-                 ("微信视频号", "weixin_shipinhao")],
+                 ("微信视频号", "tencent")],
         value=["douyin"]
     )
 
@@ -205,9 +269,17 @@ with gr.Blocks(title="多平台视频发布工具") as demo:
     # 日志输出
     logs = gr.Textbox(label="发布日志", interactive=False, lines=15, max_lines=15)
 
+
     # 定时发布开关事件处理
     def toggle_schedule_time_visibility(schedule_checked):
-        return gr.update(visible=schedule_checked)
+        if schedule_checked:
+            # 当开关打开时，设置默认时间为一小时后
+            default_time = datetime.now() + timedelta(hours=1)
+            return gr.update(visible=True, value=default_time)
+        else:
+            # 当开关关闭时，隐藏组件并将值设为None
+            return gr.update(visible=False, value=None)
+
 
     # 视频上传事件监听 - 更新视频信息
     video_file.change(
