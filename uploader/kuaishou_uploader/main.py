@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime
+from typing import List
 
+from anyio import Path
 from playwright.async_api import Playwright, async_playwright
 import os
 import asyncio
@@ -148,12 +150,15 @@ async def get_kuaishou_cookie(account_file):
 
 
 class KuaiShouVideo(object):
-    def __init__(self, title, file_path, tags, publish_date: datetime, account_file):
-        self.title = title  # 视频标题
-        self.file_path = file_path
-        self.tags = tags
-        self.publish_date = publish_date
+    def __init__(self, title: str, content: str, tags: List[str], file_path: str | Path, account_file: str | Path,
+                 publish_date: datetime = None, thumbnail_path: str | Path = None):
+        self.title: str = title  # 视频标题
+        self.content: str = content
+        self.tags: List[str] = tags
+        self.file_path: str = file_path
+        self.publish_date: datetime = publish_date
         self.account_file = account_file
+        self.thumbnail_path: str | Path = thumbnail_path
         self.date_format = '%Y-%m-%d %H:%M'
         # 自动获取Chrome浏览器路径
         self.local_executable_path = get_chrome_path()
@@ -197,33 +202,21 @@ class KuaiShouVideo(object):
         file_chooser = await fc_info.value
         await file_chooser.set_files(self.file_path)
 
-        await asyncio.sleep(2)
+        await asyncio.sleep(1)
 
         # if not await page.get_by_text("封面编辑").count():
         #     raise Exception("似乎没有跳转到到编辑页面")
 
-        await asyncio.sleep(1)
-
         # 等待按钮可交互
-        new_feature_button = page.locator('button[type="button"] span:text("我知道了")')
+        new_feature_button = page.get_by_role("button", name="Skip")
         if await new_feature_button.count() > 0:
             await new_feature_button.click()
 
-        kuaishou_logger.info("正在填充标题和话题...")
-        await page.get_by_text("描述").locator("xpath=following-sibling::div").click()
-        kuaishou_logger.info("clear existing title")
-        await page.keyboard.press("Backspace")
-        await page.keyboard.press("Control+KeyA")
-        await page.keyboard.press("Delete")
-        kuaishou_logger.info("filling new  title")
-        await page.keyboard.type(self.title)
-        await page.keyboard.press("Enter")
+        # 添加标题文字和话题
+        await self.add_title_tags(page)
 
-        # 快手只能添加3个话题
-        for index, tag in enumerate(self.tags[:3], start=1):
-            kuaishou_logger.info("正在添加第%s个话题" % index)
-            await page.keyboard.type(f"#{tag} ")
-            await asyncio.sleep(2)
+        # 添加封面
+        await self.add_thumbnail(page)
 
         max_retries = 60  # 设置最大重试次数,最大等待时间为 2 分钟
         retry_count = 0
@@ -278,10 +271,43 @@ class KuaiShouVideo(object):
 
         await context.storage_state(path=self.account_file)  # 保存cookie
         kuaishou_logger.info('cookie更新完毕！')
-        await asyncio.sleep(2)  # 这里延迟是为了方便眼睛直观的观看
         # 关闭浏览器上下文和浏览器实例
         await context.close()
         await browser.close()
+
+    async def add_title_tags(self, page):
+        await page.locator("#work-description-edit").click()
+
+        # 构建完整的文本内容
+        content = f"{self.title}\n{self.content}\n"
+        await page.keyboard.type(content)
+
+        for index, tag in enumerate(self.tags, start=1):
+            # 移除标签中的 # 号（如果有的话），因为我们要通过输入 # 来触发话题选择
+            clean_tag = tag.lstrip("#")
+            # 输入 # 号触发话题选择
+            await page.get_by_text("#话题").click()
+            # 输入标签名
+            await page.keyboard.type(clean_tag)
+            # 等待下拉选项出现
+            await page.wait_for_timeout(100)
+            # 按下回车键选择第一个匹配的话题
+            await page.keyboard.press("Enter")
+        kuaishou_logger.info(f"成功添加内容和hashtag: {len(self.tags)}")
+
+    async def add_thumbnail(self, page):
+        if self.thumbnail_path:
+            kuaishou_logger.info('  [-] 正在设置视频封面...')
+            await page.get_by_text("封面设置").nth(1).click()
+            await page.wait_for_selector("div.ant-modal:has(*:text('上传封面'))")
+            await page.get_by_text("上传封面").click()
+
+            await page.locator('div.ant-modal-body input[type="file"]').set_input_files(self.thumbnail_path)
+            await page.get_by_role("button", name="确认").click()
+
+            kuaishou_logger.info('  [+] 视频封面设置完成！')
+            # 等待封面设置对话框关闭
+            await page.wait_for_selector("div.extractFooter", state='detached')
 
     async def main(self):
         async with async_playwright() as playwright:
