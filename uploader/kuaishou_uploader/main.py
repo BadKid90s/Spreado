@@ -302,7 +302,9 @@ class KuaiShouVideo(object):
             await page.wait_for_selector("div.ant-modal:has(*:text('上传封面'))")
             await page.get_by_text("上传封面").click()
 
-            await page.locator('div.ant-modal-body input[type="file"]').set_input_files(self.thumbnail_path)
+            await page.get_by_role("button", name="上传图片").click()
+            await page.get_by_role("button", name="上传图片").set_input_files(self.thumbnail_path)
+
             await page.get_by_role("button", name="确认").click()
 
             kuaishou_logger.info('  [+] 视频封面设置完成！')
