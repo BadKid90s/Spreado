@@ -81,17 +81,24 @@ async def cookie_auth(account_file):
             return True
 
 
-async def ks_setup(account_file, handle=False):
-    account_file = get_absolute_path(account_file, "ks_uploader")
+async def kuaishou_setup(account_file, handle=False):
+    account_file = get_absolute_path(account_file, "kuaishou_uploader")
     if not os.path.exists(account_file) or not await cookie_auth(account_file):
         if not handle:
             return False
         kuaishou_logger.info('[+] cookie文件不存在或已失效，即将自动打开浏览器，请扫码登录，登陆后会自动生成cookie文件')
-        await get_ks_cookie(account_file)
+        await get_kuaishou_cookie(account_file)
     return True
 
 
-async def get_ks_cookie(account_file):
+async def get_kuaishou_cookie(account_file):
+    url_changed_event = asyncio.Event()
+
+    async def on_url_change():
+        # 检查是否是主框架的变化
+        if page.url != original_url:
+            url_changed_event.set()
+
     async with async_playwright() as playwright:
         options = {
             'args': [
@@ -113,12 +120,34 @@ async def get_ks_cookie(account_file):
         # Pause the page, and start recording manually.
         page = await context.new_page()
         await page.goto("https://cp.kuaishou.com")
-        await page.pause()
+        await page.get_by_role("link", name="立即登录").click()
+        await page.get_by_text("扫码登录").click()
         # 点击调试器的继续，保存cookie
         await context.storage_state(path=account_file)
 
+        original_url = page.url
+        # 监听页面的 'framenavigated' 事件，只关注主框架的变化
+        page.on('framenavigated',
+                lambda frame: asyncio.create_task(on_url_change()) if frame == page.main_frame else None)
 
-class KSVideo(object):
+        try:
+            # 等待 URL 变化或超时
+            await asyncio.wait_for(url_changed_event.wait(), timeout=200)  # 最多等待 200 秒
+            print("监听页面跳转成功")
+        except asyncio.TimeoutError:
+            print("监听页面跳转超时")
+            await page.close()
+            await context.close()
+            await browser.close()
+            return None
+        await context.storage_state(path=account_file)
+        await page.close()
+        await context.close()
+        await browser.close()
+        return None
+
+
+class KuaiShouVideo(object):
     def __init__(self, title, file_path, tags, publish_date: datetime, account_file):
         self.title = title  # 视频标题
         self.file_path = file_path
