@@ -242,7 +242,7 @@ class KuaiShouVideo(object):
             kuaishou_logger.warning("超过最大重试次数，视频上传可能未完成。")
 
         # 定时任务
-        if self.publish_date != 0:
+        if self.publish_date is not None:
             await self.set_schedule_time(page, self.publish_date)
 
         # 判断视频是否发布成功
@@ -283,16 +283,25 @@ class KuaiShouVideo(object):
         await page.keyboard.type(content)
 
         for index, tag in enumerate(self.tags, start=1):
-            # 移除标签中的 # 号（如果有的话），因为我们要通过输入 # 来触发话题选择
-            clean_tag = tag.lstrip("#")
-            # 输入 # 号触发话题选择
-            await page.get_by_text("#话题").click()
-            # 输入标签名
-            await page.keyboard.type(clean_tag)
-            # 等待下拉选项出现
-            await page.wait_for_timeout(100)
-            # 按下回车键选择第一个匹配的话题
+            topic_name = tag.lstrip("#")
+
+            # 2. 【核心修正】手动分解动作输入 #
+            await page.keyboard.down("Shift")  # 按下 Shift
+            await page.keyboard.press("Digit3")  # 按下主键盘区的 3
+            await page.keyboard.up("Shift")  # 松开 Shift
+
+            # 3. 稍作等待，让输入框反应过来
+            await page.wait_for_timeout(300)
+
+            # 4. 紧接着输入话题文字（注意：只输入 # 可能不会立刻弹窗，输入文字后才会触发）
+            await page.keyboard.type(topic_name, delay=100)
+            await page.wait_for_timeout(500)  # 等待联想词浮层完全渲染
+
+            # 6. 选中话题
+            # 此时通常按 Enter 或 Space 即可
             await page.keyboard.press("Enter")
+
+
         kuaishou_logger.info(f"成功添加内容和hashtag: {len(self.tags)}")
 
     async def add_thumbnail(self, page):
