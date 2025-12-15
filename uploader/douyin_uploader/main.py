@@ -125,9 +125,10 @@ async def douyin_cookie_gen(account_file):
         page = await context.new_page()
         await page.goto("https://creator.douyin.com/")
         original_url = page.url
-        
+
         # 监听页面的 'framenavigated' 事件，只关注主框架的变化
-        page.on('framenavigated', lambda frame: asyncio.create_task(on_url_change()) if frame == page.main_frame else None)
+        page.on('framenavigated',
+                lambda frame: asyncio.create_task(on_url_change()) if frame == page.main_frame else None)
 
         try:
             # 等待 URL 变化或超时
@@ -147,8 +148,8 @@ async def douyin_cookie_gen(account_file):
 
 
 class DouYinVideo(object):
-    def __init__(self, title: str, content: str, tags: List[str], file_path: str | Path, publish_date: datetime,
-                 account_file: str, thumbnail_path: Optional[str] = None, ):
+    def __init__(self, title: str, content: str, tags: List[str], file_path: str | Path, account_file: str | Path,
+                 publish_date: datetime = None, thumbnail_path: str | Path = None):
         self.title = title  # 视频标题
         self.content = content
         self.tags = tags
@@ -238,7 +239,8 @@ class DouYinVideo(object):
             await title_container.fill(self.title[:30])
         else:
             # 备用方案：通过文本定位
-            title_container = (page.get_by_text('作品标题').locator("..").locator("xpath=following-sibling::div[1]").locator("input"))
+            title_container = (
+                page.get_by_text('作品标题').locator("..").locator("xpath=following-sibling::div[1]").locator("input"))
             if await title_container.count():
                 await title_container.fill(self.title[:30])
             else:
@@ -249,7 +251,6 @@ class DouYinVideo(object):
                 await page.keyboard.press("Delete")
                 await page.keyboard.type(self.title)
                 await page.keyboard.press("Enter")
-
 
         css_selector = ".zone-container"
         # 添加内容文本
@@ -264,6 +265,9 @@ class DouYinVideo(object):
             await page.press(css_selector, "Space")
         douyin_logger.info(f'总共添加{len(self.tags)}个话题')
 
+        # 设置封面
+        await self.set_thumbnail(page, self.thumbnail_path)
+
         # 頭條/西瓜
         third_part_element = '[class^="info"] > [class^="first-part"] div div.semi-switch'
         # 定位是否有第三方平台
@@ -272,30 +276,35 @@ class DouYinVideo(object):
             if 'semi-switch-checked' not in await page.eval_on_selector(third_part_element, 'div => div.className'):
                 await page.locator(third_part_element).locator('input.semi-switch-native-control').click()
 
-        if self.publish_date != 0:
+        if self.publish_date is not None:
             await self.set_schedule_time_douyin(page, self.publish_date)
 
-        # 判断视频是否发布成功
+
+        # 等待上传完成，通过检测页面元素判断
+        # 方法： 等待页面出现"重新上传"按钮
         while True:
-            # 判断视频是否发布成功
             try:
-                publish_button = page.get_by_role('button', name="发布", exact=True)
-                if await publish_button.count():
-                    await publish_button.click()
-                await page.wait_for_url("https://creator.douyin.com/creator-micro/content/manage**",
-                                        timeout=3000)  # 如果自动跳转到作品页面，则代表发布成功
-                douyin_logger.success("  [-]视频发布成功")
+                # 定位重新上传按钮，支持preview-button-样式类名的模糊匹配
+                await (page.locator("div[class*='preview-button-']:has(div:text('重新上传'))")
+                .wait_for(timeout=3000))
+                # 如果找到了"重新上传"按钮，说明上传完成
+                douyin_logger.info(f'视频上传完成...')
                 break
-            except:
-                # 尝试处理封面问题
-                await self.handle_auto_video_cover(page)
-                douyin_logger.info("  [-] 视频正在发布中...")
-                await page.screenshot(full_page=True)
-                await asyncio.sleep(0.5)
+            except Exception:
+                douyin_logger.info(f'等待视频上传完成...')
+                # 继续等待
+                await asyncio.sleep(1)
+
+        # 点击发布按钮
+        publish_button = page.get_by_role('button', name="发布", exact=True)
+        if await publish_button.count():
+            await publish_button.click()
+        await page.wait_for_url("https://creator.douyin.com/creator-micro/content/manage**",
+                                timeout=3000)  # 如果自动跳转到作品页面，则代表发布成功
+        douyin_logger.success("  [-]视频发布成功")
 
         await context.storage_state(path=self.account_file)  # 保存cookie
         douyin_logger.success('  [-]cookie更新完毕！')
-        await asyncio.sleep(2)  # 这里延迟是为了方便眼睛直观的观看
         # 关闭浏览器上下文和浏览器实例
         await context.close()
         await browser.close()
@@ -347,7 +356,7 @@ class DouYinVideo(object):
             await page.locator("div[class^='semi-upload upload'] >> input.semi-upload-hidden-input").set_input_files(
                 thumbnail_path)
             await page.wait_for_timeout(2000)  # 等待2秒
-            await page.locator("div#tooltip-container button:visible:has-text('完成')").click()
+            await page.locator("button:visible:has-text('完成')").click()
             douyin_logger.info('  [+] 视频封面设置完成！')
             # 等待封面设置对话框关闭
             await page.wait_for_selector("div.extractFooter", state='detached')
