@@ -74,7 +74,7 @@ async def cookie_auth(account_file):
         # 访问指定的 URL
         await page.goto("https://cp.kuaishou.com/article/publish/video")
         try:
-            await page.wait_for_selector("div.names div.container div.name:text('机构服务')", timeout=5000)  # 等待5秒
+            await page.wait_for_selector("div.names div.container div.name:text('机构服务')", timeout=1000)  # 等待1秒
 
             kuaishou_logger.info("[+] 等待5秒 cookie 失效")
             return False

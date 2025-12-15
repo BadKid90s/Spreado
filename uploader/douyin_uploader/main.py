@@ -73,7 +73,7 @@ async def cookie_auth(account_file):
         # 访问指定的 URL
         await page.goto("https://creator.douyin.com/creator-micro/content/upload")
         try:
-            await page.wait_for_url("https://creator.douyin.com/creator-micro/content/upload", timeout=5000)
+            await page.wait_for_url("https://creator.douyin.com/creator-micro/content/upload", timeout=1000)
         except:
             print("[+] 等待5秒 cookie 失效")
             await context.close()
