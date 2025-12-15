@@ -14,7 +14,7 @@ from conf import BASE_DIR
 
 # 导入各平台的上传类
 try:
-    from uploader.douyin_uploader.main import DouYinVideo
+    from uploader.douyin_uploader.main import DouYinVideo, douyin_setup
 
     DOUYIN_AVAILABLE = True
 except ImportError:
@@ -122,12 +122,14 @@ def publish_to_platform_generator(platform, video_path, title, description, tags
             result += "➡️ 正在发布到抖音...\n"
             yield result
             # 创建抖音视频对象
+            account_file = Path(BASE_DIR / "cookies" / "douyin_uploader" / "account.json")
+            asyncio.run(douyin_setup(str(account_file), handle=True))
             douyin_video = DouYinVideo(
                 title=title,
                 content=description,
                 tags=tags,
                 file_path=Path(video_path),
-                account_file=str(Path(BASE_DIR) / "cookies" / "douyin_uploader" / "account.json"),
+                account_file=account_file,
                 publish_date=publish_date
             )
             asyncio.run(douyin_video.main(), debug=False)
@@ -141,12 +143,13 @@ def publish_to_platform_generator(platform, video_path, title, description, tags
             result += "➡️ 正在发布到小红书...\n"
             yield result
             # 创建小红书视频对象
+            account_file = Path(BASE_DIR / "cookies" / "xiaohongshu_uploader" / "account.json")
             xiaohongshu_video = XiaoHongShuVideo(
                 title=title,
                 content=description,
                 tags=tags,
                 file_path=Path(video_path),
-                account_file=str(Path(BASE_DIR) / "cookies" / "xiaohongshu_uploader" / "account.json"),
+                account_file=account_file,
                 publish_date=publish_date
             )
             # 运行异步上传任务
@@ -161,12 +164,13 @@ def publish_to_platform_generator(platform, video_path, title, description, tags
             result += "➡️ 正在发布到视频号...\n"
             yield result
             # 创建腾讯视频号视频对象
+            account_file = Path(BASE_DIR / "cookies" / "tencent_uploader" / "account.json")
             tencent_video = TencentVideo(
                 title=title,
                 content=description,
                 tags=tags,
                 file_path=Path(video_path),
-                account_file=str(Path(BASE_DIR) / "cookies" / "tencent_uploader" / "account.json"),
+                account_file=account_file,
                 publish_date=publish_date
             )
             # 运行异步上传任务
@@ -181,12 +185,13 @@ def publish_to_platform_generator(platform, video_path, title, description, tags
             result += "➡️ 正在发布到快手...\n"
             yield result
             # 创建快手视频对象
+            account_file = Path(BASE_DIR / "cookies" / "kuaishou_uploader" / "account.json")
             kuaishou_video = KuaiShouVideo(
                 title=title,
                 content=description,
                 tags=tags,
                 file_path=Path(video_path),
-                account_file=str(Path(BASE_DIR) / "cookies" / "kuaishou_uploader" / "account.json"),
+                account_file=account_file,
                 publish_date=publish_date
             )
             # 运行异步上传任务
