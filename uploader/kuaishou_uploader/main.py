@@ -202,7 +202,7 @@ class KuaiShouVideo(object):
         file_chooser = await fc_info.value
         await file_chooser.set_files(self.file_path)
 
-        await asyncio.sleep(1)
+        await asyncio.sleep(0.5)
 
         # if not await page.get_by_text("封面编辑").count():
         #     raise Exception("似乎没有跳转到到编辑页面")
@@ -299,17 +299,20 @@ class KuaiShouVideo(object):
         if self.thumbnail_path:
             kuaishou_logger.info('  [-] 正在设置视频封面...')
             await page.get_by_text("封面设置").nth(1).click()
-            await page.wait_for_selector("div.ant-modal:has(*:text('上传封面'))")
+            await page.wait_for_selector("div.ant-modal-body:has(*:text('上传封面'))")
+            await asyncio.sleep(0.5)
             await page.get_by_text("上传封面").click()
 
-            await page.get_by_role("button", name="上传图片").click()
-            await page.get_by_role("button", name="上传图片").set_input_files(self.thumbnail_path)
+            # 等待文件输入框出现并上传封面
+            # 使用更通用的选择器，避免依赖可能变化的CSS类名
+            file_input = page.locator("div[class*='upload'] input[type='file']")
+            await file_input.set_input_files(self.thumbnail_path)
 
             await page.get_by_role("button", name="确认").click()
 
             kuaishou_logger.info('  [+] 视频封面设置完成！')
             # 等待封面设置对话框关闭
-            await page.wait_for_selector("div.extractFooter", state='detached')
+            await page.wait_for_selector("div.ant-modal", state='detached')
 
     async def main(self):
         async with async_playwright() as playwright:
