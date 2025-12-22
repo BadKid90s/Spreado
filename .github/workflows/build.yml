@@ -5,14 +5,18 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-  workflow_dispatch:  # 允许手动触发
+  workflow_dispatch:
+
+# 🎯 统一配置区
+env:
+  APP_NAME: uploader  # ←←← 修改这里即可改变所有平台输出名
 
 jobs:
   build:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-      fail-fast: false  # 一个平台失败不影响其他
+      fail-fast: false
 
     runs-on: ${{ matrix.os }}
 
@@ -28,30 +32,28 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
           pip install pyinstaller
 
       - name: Build executable
         run: |
-          # Linux: app → app (无扩展名)
-          # Windows: app.py → app.exe
-          # macOS: app.py → app (Unix 可执行文件)
-          pyinstaller --onefile --windowed --collect-all gradio -n uploader ui/app.py
+          pyinstaller --onefile --windowed --collect-all gradio -n ${{ env.APP_NAME }} ui/app.py
 
-      - name: Determine artifact name
+      - name: Set artifact path
         id: artifact
         shell: bash
         run: |
           if [[ "$RUNNER_OS" == "Linux" ]]; then
-            echo "name=gradio-app-linux" >> $GITHUB_OUTPUT
-            echo "path=dist/app" >> $GITHUB_OUTPUT
+            echo "path=dist/${{ env.APP_NAME }}" >> $GITHUB_OUTPUT
           elif [[ "$RUNNER_OS" == "Windows" ]]; then
-            echo "name=gradio-app-windows" >> $GITHUB_OUTPUT
-            echo "path=dist\\app.exe" >> $GITHUB_OUTPUT
+            echo "path=dist/${{ env.APP_NAME }}.exe" >> $GITHUB_OUTPUT
           elif [[ "$RUNNER_OS" == "macOS" ]]; then
-            echo "name=gradio-app-macos" >> $GITHUB_OUTPUT
-            echo "path=dist/app" >> $GITHUB_OUTPUT
+            echo "path=dist/${{ env.APP_NAME }}" >> $GITHUB_OUTPUT
           fi
+          # Artifact name 也可统一，但这里保留平台后缀便于识别
+          echo "name=gradio-app-${{ matrix.os == 'ubuntu-latest' && 'linux' || matrix.os == 'windows-latest' && 'windows' || 'macos' }}" >> $GITHUB_OUTPUT
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
