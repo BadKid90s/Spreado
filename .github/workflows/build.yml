@@ -1,4 +1,4 @@
-# .github/workflows/build-upload-release.yml
+# .github/workflows/build.yml
 name: Build and Upload to Published Release
 
 # 环境变量定义
@@ -113,18 +113,17 @@ jobs:
           if [ -f "./$TARGET_FILE" ]; then
             ls -la "./$TARGET_FILE" || dir "./$TARGET_FILE"
             echo "✅ Renamed to $TARGET_FILE successfully"
+            echo "FILE_EXISTS=true" >> $GITHUB_ENV  # 设置环境变量标记文件存在
           else
             echo "❌ Failed to rename to $TARGET_FILE"
+            echo "FILE_EXISTS=false" >> $GITHUB_ENV
             exit 1
           fi
 
       # 步骤6：上传产物到Release（仅当文件存在时执行）
       - name: Upload asset to GitHub Release
         uses: softprops/action-gh-release@v2
-        if: |
-          (runner.os == 'Linux' && exists('./uploader-linux')) ||
-          (runner.os == 'Windows' && exists('./uploader-windows.exe')) ||
-          (runner.os == 'macOS' && exists('./uploader-macos'))
+        if: env.FILE_EXISTS == 'true'  # 改用环境变量判断文件是否存在
         with:
           # 绑定到当前Release的Tag
           tag_name: ${{ github.event.release.tag_name }}
