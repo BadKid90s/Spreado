@@ -1,0 +1,60 @@
+name: Build Gradio App for All Platforms
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+      fail-fast: false  # 一个平台失败不影响其他
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build executable
+        run: |
+          # Linux: app → app (无扩展名)
+          # Windows: app.py → app.exe
+          # macOS: app.py → app (Unix 可执行文件)
+          pyinstaller --onefile --windowed --collect-all gradio app.py
+
+      - name: Determine artifact name
+        id: artifact
+        shell: bash
+        run: |
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            echo "name=gradio-app-linux" >> $GITHUB_OUTPUT
+            echo "path=dist/app" >> $GITHUB_OUTPUT
+          elif [[ "$RUNNER_OS" == "Windows" ]]; then
+            echo "name=gradio-app-windows" >> $GITHUB_OUTPUT
+            echo "path=dist\\app.exe" >> $GITHUB_OUTPUT
+          elif [[ "$RUNNER_OS" == "macOS" ]]; then
+            echo "name=gradio-app-macos" >> $GITHUB_OUTPUT
+            echo "path=dist/app" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact.outputs.name }}
+          path: ${{ steps.artifact.outputs.path }}
