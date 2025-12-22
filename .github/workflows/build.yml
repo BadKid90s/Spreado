@@ -11,7 +11,7 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [linux-latest, windows-latest, macos-latest]
       fail-fast: false  # 一个平台失败不影响其他
 
     runs-on: ${{ matrix.os }}
@@ -36,7 +36,7 @@ jobs:
           # Linux: app → app (无扩展名)
           # Windows: app.py → app.exe
           # macOS: app.py → app (Unix 可执行文件)
-          pyinstaller --onefile --windowed --collect-all gradio app.py
+          pyinstaller --onefile --windowed --collect-all gradio ui/app.py
 
       - name: Determine artifact name
         id: artifact
