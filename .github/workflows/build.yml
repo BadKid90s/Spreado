@@ -1,144 +1,144 @@
 # .github/workflows/build.yml
 name: Build and Upload to Published Release
 
+# 环境变量定义
 env:
-  APP_NAME: uploader
-  PYTHON_VERSION: '3.10'
-  ENTRY_FILE: 'ui/app.py'
+  APP_NAME: uploader          # 基础应用名称
+  PYTHON_VERSION: '3.10'      # 固定Python版本
+  ENTRY_FILE: 'ui/app.py'     # 程序入口文件
 
+# 触发条件：仅当Release被正式发布（published）时执行
 on:
   release:
     types: [published]
 
+# 多平台构建任务
 jobs:
   build-and-upload:
+    # 并行构建Linux/Windows/macOS，一个平台失败不影响其他
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
       fail-fast: false
+
+    # 运行环境
     runs-on: ${{ matrix.os }}
+
+    # 显式声明权限（GitHub Actions最佳实践）
     permissions:
-      contents: write
-      actions: read
+      contents: write  # 允许上传Release资产
+      actions: read    # 允许读取Action日志
 
     steps:
+      # 步骤1：拉取代码（绑定到当前Release的Tag）
       - name: Checkout source code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.release.tag_name }}
-          fetch-depth: 1
+          ref: ${{ github.event.release.tag_name }}  # 确保代码与Release Tag一致
+          fetch-depth: 1                             # 浅克隆加速
 
+      # 步骤2：配置Python环境（带缓存）
       - name: Set up Python ${{ env.PYTHON_VERSION }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
+          cache: 'pip'  # 缓存pip依赖，大幅缩短后续构建时间
 
+      # 步骤3：安装依赖（跨平台兼容）
       - name: Install dependencies (pip + pyinstaller)
-        shell: bash
+        shell: bash  # Windows下由Git for Windows提供bash
         run: |
+          # 升级pip并安装基础工具
           python -m pip install --upgrade pip setuptools wheel
+          
+          # 安装打包工具
           pip install pyinstaller
+          
+          # 安装项目依赖（如果存在requirements.txt）
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
-            echo "✅ Installed project dependencies"
+            echo "✅ Installed project dependencies from requirements.txt"
           else
-            echo "ℹ️ No requirements.txt found"
+            echo "ℹ️ No requirements.txt found, skip project dependencies"
           fi
+          
+          # 打印已安装包列表（便于调试）
           pip list
 
-      # 新增步骤：查找safehttpx的安装路径，用于拷贝静态文件
-      - name: Locate safehttpx and gradio static files
+      # 步骤4：构建可执行文件（带调试日志）
+      - name: Build executable with PyInstaller
         shell: bash
         run: |
-          # 获取safehttpx安装目录
-          SAFEHTTXP_PATH=$(python -c "import safehttpx; print(safehttpx.__path__[0])")
-          echo "SAFEHTTXP_PATH=$SAFEHTTXP_PATH" >> $GITHUB_ENV
-          # 获取gradio安装目录
-          GRADIO_PATH=$(python -c "import gradio; print(gradio.__path__[0])")
-          echo "GRADIO_PATH=$GRADIO_PATH" >> $GITHUB_ENV
-          echo "🔍 safehttpx path: $SAFEHTTXP_PATH"
-          echo "🔍 gradio path: $GRADIO_PATH"
-
-      - name: Build executable with PyInstaller (fix static files)
-        shell: bash
-        run: |
+          # 打印系统信息
           echo "🔍 Build environment: $RUNNER_OS / $RUNNER_ARCH"
           python --version
           
-          # 核心修复：通过--add-data/--add-files包含缺失的静态文件
-          # 区分Windows和类Unix系统的路径分隔符
-          if [[ "$RUNNER_OS" == "Windows" ]]; then
-            # Windows使用分号分隔，路径格式：源路径;目标路径
-            ADD_DATA_SAFEHTTXP="--add-data=${{ env.SAFEHTTXP_PATH }}\\*;safehttpx\\"
-            ADD_DATA_GRADIO="--add-data=${{ env.GRADIO_PATH }}\\templates\\*;gradio\\templates\\"
-            ADD_DATA_GRADIO_STATIC="--add-data=${{ env.GRADIO_PATH }}\\static\\*;gradio\\static\\"
-          else
-            # Linux/macOS使用冒号分隔，路径格式：源路径:目标路径
-            ADD_DATA_SAFEHTTXP="--add-data=${{ env.SAFEHTTXP_PATH }}/*:safehttpx/"
-            ADD_DATA_GRADIO="--add-data=${{ env.GRADIO_PATH }}/templates/*:gradio/templates/"
-            ADD_DATA_GRADIO_STATIC="--add-data=${{ env.GRADIO_PATH }}/static/*:gradio/static/"
-          fi
-          
-          # 执行PyInstaller打包，包含所有缺失的静态文件
+          # 执行PyInstaller打包
+          # --onefile：单文件打包 | --windowed：无控制台窗口 | --collect-all gradio：完整打包gradio依赖
           pyinstaller \
             --onefile \
             --windowed \
             --collect-all gradio \
-            --collect-all safehttpx \  # 显式收集safehttpx所有依赖
-            $ADD_DATA_SAFEHTTXP \      # 强制包含safehttpx的静态文件（如version.txt）
-            $ADD_DATA_GRADIO \         # 包含gradio模板文件
-            $ADD_DATA_GRADIO_STATIC \  # 包含gradio静态资源
             -n ${{ env.APP_NAME }} \
             ${{ env.ENTRY_FILE }}
           
-          # 检查打包产物
+          # 检查打包产物是否存在
           if [ -d "dist" ]; then
-            ls -la dist/ || dir dist/
-            echo "✅ Build completed"
+            ls -la dist/ || dir dist/  # 兼容Windows/macOS/Linux的目录查看
+            echo "✅ Build completed, dist directory exists"
           else
             echo "❌ Build failed, dist directory not found"
             exit 1
           fi
 
+      # 步骤5：重命名产物（按平台差异化命名）
       - name: Rename executable for platform
         shell: bash
         run: |
+          # 定义目标文件名
           if [[ "$RUNNER_OS" == "Linux" ]]; then
             TARGET_FILE="uploader-linux"
             mv "dist/${{ env.APP_NAME }}" "./$TARGET_FILE"
-            chmod +x "./$TARGET_FILE"
+            chmod +x "./$TARGET_FILE"  # 增加可执行权限
           elif [[ "$RUNNER_OS" == "Windows" ]]; then
             TARGET_FILE="uploader-windows.exe"
             mv "dist/${{ env.APP_NAME }}.exe" "./$TARGET_FILE"
           elif [[ "$RUNNER_OS" == "macOS" ]]; then
             TARGET_FILE="uploader-macos"
             mv "dist/${{ env.APP_NAME }}" "./$TARGET_FILE"
-            chmod +x "./$TARGET_FILE"
+            chmod +x "./$TARGET_FILE"  # 增加可执行权限
           fi
           
+          # 验证重命名后的文件
           if [ -f "./$TARGET_FILE" ]; then
             ls -la "./$TARGET_FILE" || dir "./$TARGET_FILE"
-            echo "FILE_EXISTS=true" >> $GITHUB_ENV
+            echo "✅ Renamed to $TARGET_FILE successfully"
+            echo "FILE_EXISTS=true" >> $GITHUB_ENV  # 设置环境变量标记文件存在
           else
             echo "❌ Failed to rename to $TARGET_FILE"
             echo "FILE_EXISTS=false" >> $GITHUB_ENV
             exit 1
           fi
 
+      # 步骤6：上传产物到Release（仅当文件存在时执行）
       - name: Upload asset to GitHub Release
         uses: softprops/action-gh-release@v2
-        if: env.FILE_EXISTS == 'true'
+        if: env.FILE_EXISTS == 'true'  # 改用环境变量判断文件是否存在
         with:
+          # 绑定到当前Release的Tag
           tag_name: ${{ github.event.release.tag_name }}
+          # 仅上传当前平台的产物
           files: |
             ${{ runner.os == 'Linux' && './uploader-linux' || 
                runner.os == 'Windows' && './uploader-windows.exe' || 
                './uploader-macos' }}
-          fail_on_unmatched_files: true
+          # 可选：添加上传说明
+          fail_on_unmatched_files: true  # 文件不存在时直接失败
         env:
+          # GitHub自动生成的Token，无需手动配置
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # 步骤7：构建失败时打印调试信息（可选）
       - name: Debug info on failure
         if: failure()
         shell: bash
@@ -147,6 +147,7 @@ jobs:
           echo "Runner OS: $RUNNER_OS"
           echo "Current directory: $(pwd)"
           ls -la || dir
+          # 打印PyInstaller日志（如果存在）
           if [ -f "pyinstaller.log" ]; then
             cat pyinstaller.log
           fi
