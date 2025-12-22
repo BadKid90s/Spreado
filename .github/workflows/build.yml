@@ -1,15 +1,12 @@
-name: Build Gradio App for All Platforms
+name: Release Gradio App
+
+env:
+  APP_NAME: uploader
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-  workflow_dispatch:
-
-# 🎯 统一配置区
-env:
-  APP_NAME: uploader  # ←←← 修改这里即可改变所有平台输出名
+    tags:
+      - 'v*'
 
 jobs:
   build:
@@ -23,6 +20,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -30,6 +29,7 @@ jobs:
           python-version: '3.10'
 
       - name: Install dependencies
+        shell: bash  # 👈 强制使用 bash
         run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then
@@ -38,25 +38,64 @@ jobs:
           pip install pyinstaller
 
       - name: Build executable
+        shell: bash  # 👈
         run: |
           pyinstaller --onefile --windowed --collect-all gradio -n ${{ env.APP_NAME }} ui/app.py
 
-      - name: Set artifact path
-        id: artifact
-        shell: bash
+      - name: Set asset name and path
+        id: asset
+        shell: bash  # 👈
         run: |
           if [[ "$RUNNER_OS" == "Linux" ]]; then
             echo "path=dist/${{ env.APP_NAME }}" >> $GITHUB_OUTPUT
+            echo "asset_name=${{ env.APP_NAME }}-linux" >> $GITHUB_OUTPUT
           elif [[ "$RUNNER_OS" == "Windows" ]]; then
             echo "path=dist/${{ env.APP_NAME }}.exe" >> $GITHUB_OUTPUT
+            echo "asset_name=${{ env.APP_NAME }}-windows.exe" >> $GITHUB_OUTPUT
           elif [[ "$RUNNER_OS" == "macOS" ]]; then
             echo "path=dist/${{ env.APP_NAME }}" >> $GITHUB_OUTPUT
+            echo "asset_name=${{ env.APP_NAME }}-macos" >> $GITHUB_OUTPUT
           fi
-          # Artifact name 也可统一，但这里保留平台后缀便于识别
-          echo "name=gradio-app-${{ matrix.os == 'ubuntu-latest' && 'linux' || matrix.os == 'windows-latest' && 'windows' || 'macos' }}" >> $GITHUB_OUTPUT
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.artifact.outputs.name }}
-          path: ${{ steps.artifact.outputs.path }}
+          name: ${{ steps.asset.outputs.asset_name }}
+          path: ${{ steps.asset.outputs.path }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: Generate changelog
+        shell: bash  # 👈
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 --exclude="$(git tag --points-at HEAD)" HEAD 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            echo "# Changelog" > CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            git log --oneline --no-merges $PREV_TAG..$(git describe --tags --exact-match) >> CHANGELOG.md
+          else
+            echo "# Initial Release" > CHANGELOG.md
+            echo "First public release of ${{ env.APP_NAME }}." >> CHANGELOG.md
+          fi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Release ${{ github.ref_name }}
+          body_path: CHANGELOG.md
+          files: |
+            release-assets/*/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
