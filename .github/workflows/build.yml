@@ -1,14 +1,14 @@
-name: Build and Upload to Release
+name: Build and Upload to Published Release
 
 env:
-  APP_NAME: uploader  # ←←← 统一修改名称
+  APP_NAME: uploader
 
 on:
   release:
-    types: [published]  # 仅当 Release 被正式发布时触发
+    types: [published]  # 必须是 published，不能是 draft
 
 jobs:
-  build-and-upload:
+  upload-assets:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
@@ -20,7 +20,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.release.tag_name }}  # 检出该 Release 对应的 tag 代码
+          ref: ${{ github.event.release.tag_name }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -41,26 +41,24 @@ jobs:
         run: |
           pyinstaller --onefile --windowed --collect-all gradio -n ${{ env.APP_NAME }} ui/app.py
 
-      - name: Determine asset path and name
-        id: asset
+      - name: Rename to platform-specific asset
         shell: bash
         run: |
           if [[ "$RUNNER_OS" == "Linux" ]]; then
-            echo "path=dist/${{ env.APP_NAME }}" >> $GITHUB_OUTPUT
-            echo "name=${{ env.APP_NAME }}-linux" >> $GITHUB_OUTPUT
+            mv dist/${{ env.APP_NAME }} ./uploader-linux
           elif [[ "$RUNNER_OS" == "Windows" ]]; then
-            echo "path=dist/${{ env.APP_NAME }}.exe" >> $GITHUB_OUTPUT
-            echo "name=${{ env.APP_NAME }}-windows.exe" >> $GITHUB_OUTPUT
+            mv dist/${{ env.APP_NAME }}.exe ./uploader-windows.exe
           elif [[ "$RUNNER_OS" == "macOS" ]]; then
-            echo "path=dist/${{ env.APP_NAME }}" >> $GITHUB_OUTPUT
-            echo "name=${{ env.APP_NAME }}-macos" >> $GITHUB_OUTPUT
+            mv dist/${{ env.APP_NAME }} ./uploader-macos
           fi
 
-      - name: Upload to GitHub Release
+      - name: Upload asset to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.release.tag_name }}
-          files: ${{ steps.asset.outputs.path }}
-          file_names: ${{ steps.asset.outputs.name }}
+          files: |
+            ./uploader-linux
+            ./uploader-windows.exe
+            ./uploader-macos
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
