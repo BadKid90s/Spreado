@@ -126,21 +126,43 @@ class KuaiShouUploader(BaseUploader):
         """
         max_retries = 60
         retry_count = 0
+        
+        # 使用更精确的选择器和多种检测方法
+        upload_complete_selectors = [
+            "#work-description-edit",  # 视频信息编辑区域
+            "div.upload-success",       # 上传成功标记
+            "button.publish-btn:visible" # 发布按钮可见
+        ]
 
         while retry_count < max_retries:
             try:
-                number = await page.locator("text=上传中").count()
-
-                if number == 0:
-                    self.logger.success("视频上传完毕")
-                    break
-                else:
-                    if retry_count % 5 == 0:
+                # 方法1: 检查"上传中"文本是否消失
+                uploading_count = await page.locator("text=上传中").count()
+                if uploading_count == 0:
+                    # 方法2: 检查上传完成的标记是否出现
+                    for selector in upload_complete_selectors:
+                        try:
+                            element = page.locator(selector)
+                            if await element.count() > 0 and await element.first.is_visible():
+                                self.logger.success("视频上传完毕")
+                                return
+                        except:
+                            continue
+                    
+                    # 如果"上传中"消失但其他标记未出现，继续等待
+                    if retry_count % 10 == 0:
                         self.logger.info("正在上传视频中...")
-                    await page.wait_for_timeout(1000)
+                
+                # 动态调整等待时间，减少资源占用
+                if retry_count < 20:
+                    await page.wait_for_timeout(1000)  # 前20秒每秒检查一次
+                else:
+                    await page.wait_for_timeout(2000)  # 20秒后每2秒检查一次
+                    
             except Exception as e:
-                self.logger.error(f"检查上传状态时发生错误: {e}")
-                await page.wait_for_timeout(1000)
+                self.logger.warning(f"检查上传状态时发生错误: {e}")
+                await page.wait_for_timeout(1500)
+            
             retry_count += 1
 
         if retry_count == max_retries:
@@ -161,19 +183,32 @@ class KuaiShouUploader(BaseUploader):
         text_content = f"{title}\n{content}\n"
         await page.keyboard.type(text_content)
 
+        added_tags_count = 0
         for tag in tags:
             topic_name = tag.lstrip("#")
 
-            await page.keyboard.down("Shift")
-            await page.keyboard.press("Digit3")
-            await page.keyboard.up("Shift")
+            try:
+                # 优化shift+3输入#号
+                await page.keyboard.down("Shift")  # 按下 Shift
+                await page.keyboard.press("Digit3")  # 按下主键盘区的 3
+                await page.keyboard.up("Shift")  # 松开 Shift
+                
+                # 减少等待时间
+                await page.wait_for_timeout(100)
+                
+                # 减少输入延迟
+                await page.keyboard.type(topic_name, delay=50)
+                
+                # 减少等待时间
+                await page.wait_for_timeout(500)
+                
+                await page.keyboard.press("Enter")
+                added_tags_count += 1
+            except Exception as e:
+                self.logger.warning(f"[!] 添加标签 {topic_name} 失败: {e}")
+                continue
 
-            await page.wait_for_timeout(300)
-            await page.keyboard.type(topic_name, delay=100)
-            await page.wait_for_timeout(500)
-            await page.keyboard.press("Enter")
-
-        self.logger.info(f"成功添加内容和hashtag: {len(tags)}")
+        self.logger.info(f"成功添加内容和hashtag: {added_tags_count}/{len(tags)}")
 
     async def _set_thumbnail(self, page: Page, thumbnail_path: Optional[str | Path]):
         """
@@ -187,18 +222,107 @@ class KuaiShouUploader(BaseUploader):
             return
 
         self.logger.info("[-] 正在设置视频封面...")
-        await page.get_by_text("封面设置").nth(1).click()
-        await page.wait_for_selector("div.ant-modal-body:has(*:text('上传封面'))")
-        await page.wait_for_timeout(300)
-        await page.get_by_text("上传封面").click()
-
-        file_input = page.locator("div[class*='upload'] input[type='file']")
+        
+        # 等待封面设置按钮加载完成并可点击
+        cover_setting_button = page.get_by_text("封面设置").nth(1)
+        await cover_setting_button.wait_for(state='visible', timeout=10000)
+        
+        # 检查按钮是否可点击
+        max_retries = 10
+        retry_count = 0
+        while retry_count < max_retries:
+            if await cover_setting_button.is_enabled():
+                break
+            await page.wait_for_timeout(500)
+            retry_count += 1
+        
+        await cover_setting_button.click()
+        
+        # 等待封面设置模态框加载完成
+        await page.wait_for_selector("div.ant-modal-body:has(*:text('上传封面'))", timeout=10000, state='visible')
+        
+        # 等待上传封面按钮加载完成并可点击
+        upload_cover_button = page.get_by_text("上传封面")
+        await upload_cover_button.wait_for(state='visible', timeout=10000)
+        
+        # 检查按钮是否可点击
+        retry_count = 0
+        while retry_count < max_retries:
+            if await upload_cover_button.is_enabled():
+                break
+            await page.wait_for_timeout(500)
+            retry_count += 1
+        
+        await upload_cover_button.click()
+        
+        # 等待文件输入框加载完成 - 可能是隐藏的，所以使用attached状态
+        file_input_selector = "div[class*='upload'] input[type='file']"
+        await page.wait_for_selector(file_input_selector, timeout=10000, state='attached')
+        file_input = page.locator(file_input_selector)
         await file_input.set_input_files(thumbnail_path)
-
-        await page.get_by_role("button", name="确认").click()
-
+        self.logger.info("[+] 封面图片上传成功")
+        
+        # 获取第二个具有"封面设置"文本的元素
+        cover_setting_element = page.get_by_text("封面设置").nth(1)
+        await cover_setting_element.wait_for(state='visible', timeout=10000)
+        
+        # 获取该元素后的img元素
+        cover_img_locator = cover_setting_element.locator("xpath=following::img").first
+        await cover_img_locator.wait_for(state='visible', timeout=10000)
+        
+        # 记录确认前的封面图片URL
+        original_img_url = await cover_img_locator.get_attribute("src")
+        self.logger.info(f"[+] 原始封面图片URL: {original_img_url[:50]}...")
+        
+        # 等待确认按钮加载完成并可点击
+        confirm_button = page.get_by_role("button", name="确认")
+        await confirm_button.wait_for(state='visible', timeout=10000)
+        
+        # 检查按钮是否可点击
+        retry_count = 0
+        while retry_count < max_retries:
+            if await confirm_button.is_enabled():
+                break
+            await page.wait_for_timeout(500)
+            retry_count += 1
+        
+        await confirm_button.click()
+        
+        # 通过检查封面图片URL是否变化来判断封面是否设置成功
+        self.logger.info("[+] 等待封面图片URL变化...")
+        
+        # 等待封面图片URL变化
+        max_url_checks = 20
+        url_check_count = 0
+        cover_set_success = False
+        
+        while url_check_count < max_url_checks:
+            try:
+                current_img_url = await cover_img_locator.get_attribute("src")
+                if current_img_url:
+                    self.logger.debug(f"[+] 当前封面图片URL: {current_img_url[:50]}...")
+                else:
+                    self.logger.debug("[+] 当前封面图片URL: None")
+                
+                # 判断URL是否发生变化
+                if current_img_url and current_img_url != original_img_url:
+                    self.logger.info("[+] 封面图片URL已变化，封面设置成功！")
+                    cover_set_success = True
+                    break
+                
+                await page.wait_for_timeout(500)
+                url_check_count += 1
+            except Exception as e:
+                self.logger.warning(f"[-] 检查封面图片URL时出错: {e}")
+                await page.wait_for_timeout(500)
+                url_check_count += 1
+        
+        if not cover_set_success:
+            self.logger.warning("[-] 封面图片URL未发生变化，封面设置可能未成功")
+        else:
+            self.logger.info("[+] 封面设置成功！")
+        
         self.logger.info("[+] 视频封面设置完成！")
-        await page.wait_for_selector("div.ant-modal", state='detached')
 
     async def _set_schedule_time(self, page: Page, publish_date: datetime):
         """
@@ -208,7 +332,7 @@ class KuaiShouUploader(BaseUploader):
             page: 页面实例
             publish_date: 发布时间
         """
-        self.logger.info("click schedule")
+        self.logger.info(f"设置定时发布时间为: {publish_date_hour}")
         publish_date_hour = publish_date.strftime("%Y-%m-%d %H:%M:%S")
         await page.locator("label:text('发布时间')").locator('xpath=following-sibling::div').locator('.ant-radio-input').nth(1).click()
         await page.wait_for_selector('div.ant-picker-input input[placeholder="选择日期时间"]', state='visible', timeout=5000)
@@ -240,7 +364,7 @@ class KuaiShouUploader(BaseUploader):
                     await confirm_button.click()
 
                 await page.wait_for_url(self.success_url_pattern, timeout=5000)
-                self.logger.success("视频发布成功")
+                self.logger.info("视频发布成功")
                 break
             except Exception as e:
                 self.logger.info(f"视频正在发布中... 错误: {e}")
