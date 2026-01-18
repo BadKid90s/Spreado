@@ -1,14 +1,14 @@
 import asyncio
 
-from uploader.tencent_uploader import TencentUploader
+from uploader.shipinhao_uploader import ShipinhaoUploader
 from uploader.auth_manager import AuthManager
 
 if __name__ == '__main__':
-    uploader = TencentUploader(headless=False)
+    uploader = ShipinhaoUploader(headless=False)
     auth_manager = AuthManager(uploader)
     
     result = asyncio.run(auth_manager.perform_login(headless=False))
     if result:
-        print("腾讯视频认证成功！")
+        print("视频号认证成功！")
     else:
-        print("腾讯视频认证失败！")
+        print("视频号认证失败！")

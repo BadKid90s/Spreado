@@ -1,10 +1,10 @@
 import asyncio
-from pathlib import Path
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from conf import BASE_DIR
-from uploader.tencent_uploader import TencentUploader, TencentZoneTypes
 from uploader.auth_manager import AuthManager
+from uploader.shipinhao_uploader import ShipinhaoUploader
 from utils.files_times import get_title_and_hashtags
 
 if __name__ == '__main__':
@@ -22,7 +22,7 @@ if __name__ == '__main__':
 
     publish_time = datetime.now() + timedelta(hours=2)
 
-    uploader = TencentUploader(headless=True)
+    uploader = ShipinhaoUploader(headless=False)
     auth_manager = AuthManager(uploader)
     
     async def upload():
@@ -34,13 +34,13 @@ if __name__ == '__main__':
                 tags=tags,
                 publish_date=publish_time,
                 thumbnail_path=thumbnail_path,
-                category=TencentZoneTypes.LIFESTYLE.value
             )
             if result:
                 print("视频上传成功！")
             else:
                 print("视频上传失败！")
         else:
-            print("认证失败，请先运行 get_tencent_cookie.py 获取认证信息")
+            print("认证失败，请先运行 get_shipinhao_cookie.py 获取认证信息")
 
     asyncio.run(upload())
+    print("退出程序")

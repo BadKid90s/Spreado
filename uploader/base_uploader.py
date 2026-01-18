@@ -481,7 +481,6 @@ class BaseUploader(ABC):
         tags: List[str],
         publish_date: Optional[datetime] = None,
         thumbnail_path: Optional[str | Path] = None,
-        **kwargs
     ) -> bool:
         """
         上传视频
@@ -509,7 +508,6 @@ class BaseUploader(ABC):
         publish_date: Optional[datetime] = None,
         thumbnail_path: Optional[str | Path] = None,
         auto_login: bool = False,
-        **kwargs
     ) -> bool:
         """
         主上传流程，包含登录验证和视频上传
@@ -540,8 +538,7 @@ class BaseUploader(ABC):
                 content=content,
                 tags=tags,
                 publish_date=publish_date,
-                thumbnail_path=thumbnail_path,
-                **kwargs
+                thumbnail_path=thumbnail_path
             )
 
             if result:

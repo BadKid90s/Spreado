@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from uploader.douyin_uploader import DouYinUploader
 from uploader.xiaohongshu_uploader import XiaoHongShuUploader
 from uploader.kuaishou_uploader import KuaiShouUploader
-from uploader.tencent_uploader import TencentUploader
+from uploader.shipinhao_uploader import ShipinhaoUploader
 from utils.files_times import get_title_and_hashtags
 from uploader.auth_manager import AuthManager
 from utils.log import get_logger
@@ -22,7 +22,7 @@ PLATFORMS = {
     "douyin": DouYinUploader,
     "xiaohongshu": XiaoHongShuUploader,
     "kuaishou": KuaiShouUploader,
-    "tencent": TencentUploader,
+    "shipinhao": ShipinhaoUploader,
 }
 
 ACTIONS = ["login", "upload", "verify", "status"]
