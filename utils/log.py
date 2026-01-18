@@ -1,5 +1,5 @@
 from pathlib import Path
-from sys import stdout
+
 from loguru import logger
 
 from conf import BASE_DIR
@@ -36,17 +36,3 @@ def create_logger(log_name: str, file_path: str):
     Path(BASE_DIR / file_path).parent.mkdir(exist_ok=True)
     logger.add(Path(BASE_DIR / file_path), filter=filter_record, level="INFO", rotation="10 MB", retention="10 days", backtrace=True, diagnose=True)
     return logger.bind(business_name=log_name)
-
-
-# Remove all existing handlers
-logger.remove()
-# Add a standard console handler
-logger.add(stdout, colorize=True, format=log_formatter)
-
-douyin_logger = create_logger('douyin', 'logs/douyin.log')
-tencent_logger = create_logger('tencent', 'logs/tencent.log')
-tiktok_logger = create_logger('tiktok', 'logs/tiktok.log')
-bilibili_logger = create_logger('bilibili', 'logs/bilibili.log')
-kuaishou_logger = create_logger('kuaishou', 'logs/kuaishou.log')
-baijiahao_logger = create_logger('baijiahao', 'logs/baijiahao.log')
-xiaohongshu_logger = create_logger('xiaohongshu', 'logs/xiaohongshu.log')
