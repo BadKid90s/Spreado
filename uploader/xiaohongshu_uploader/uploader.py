@@ -290,7 +290,7 @@ class XiaoHongShuUploader(BaseUploader):
             await page.keyboard.press("End")
             await page.wait_for_timeout(800)  # 增加延迟，确保光标移动到末尾
 
-        self.logger.info(f"标题和{added_tags}个标签已添加 (共{len(tags)}个标签)")
+        self.logger.info(f"[+] 标题和{added_tags}个标签已添加 (共{len(tags)}个标签)")
 
     async def _click_first_visible_element(self, page: Page, selectors: List[str], description: str = "元素", wait_after: int = 0) -> bool:
         """
@@ -582,12 +582,10 @@ class XiaoHongShuUploader(BaseUploader):
         # 创建一个事件来标记导航完成
         import asyncio
         navigation_completed = asyncio.Event()
-        success_occurred = False
         navigation_history = []
         
         # 定义导航事件处理函数
         async def on_framenavigated(frame):
-            nonlocal success_occurred
             nonlocal navigation_history
             
             if frame == page.main_frame:
@@ -597,7 +595,6 @@ class XiaoHongShuUploader(BaseUploader):
                 
                 # 检查是否到达成功页面
                 if "/success" in url or "published=true" in url:
-                    success_occurred = True
                     navigation_completed.set()
         
         try:
