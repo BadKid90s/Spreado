@@ -1,6 +1,7 @@
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
+import time
 
 from playwright.async_api import Page
 import asyncio
@@ -124,14 +125,69 @@ class DouYinUploader(BaseUploader):
         Args:
             page: 页面实例
         """
-        while True:
+        max_retries = 120  # 最多等待2分钟
+        retry_count = 0
+
+        # 尝试多种选择器来检测上传状态
+        preview_selectors = [
+            'div[class^="preview-button"]:has(div:text("重新上传"))',
+            'div[class*="preview"]',
+            'div[class*="video-content"]'
+        ]
+
+        while retry_count < max_retries:
             try:
-                await page.locator("div[class*='preview-button-']:has(div:text('重新上传'))").wait_for(timeout=3000)
-                self.logger.info("视频上传完成...")
-                break
-            except Exception:
-                self.logger.info("等待视频上传完成...")
-                await page.wait_for_timeout(500)
+                # 检查是否有预览元素出现
+                for selector in preview_selectors:
+                    if await page.locator(selector).count() > 0:
+                        if await page.locator(selector).first.is_visible():
+                            self.logger.info(f"[+] 检测到预览元素: {selector}")
+                            return
+
+                # 检查是否有"上传成功"的文本
+                success_texts = ['上传成功', '已上传', '完成']
+                for text in success_texts:
+                    if await page.locator(f'text={text}').count() > 0:
+                        self.logger.info(f"[+] 检测到上传成功文本: {text}")
+                        return
+
+                # 检查是否有进度条，如果没有，则认为上传已完成
+                progress_bars = [
+                    'div[class*="progress"]',
+                    'div[class*="uploading"]',
+                    'div[class*="loading"]'
+                ]
+                progress_found = False
+                for bar in progress_bars:
+                    if await page.locator(bar).count() > 0:
+                        if await page.locator(bar).first.is_visible():
+                            progress_found = True
+                            break
+
+                if not progress_found:
+                    # 检查是否有视频信息编辑区域，这也表示上传完成
+                    info_selectors = [
+                        'input[placeholder*="填写作品标题"]',
+                        'div.zone-container',
+                        '.notranslate'
+                    ]
+                    for selector in info_selectors:
+                        if await page.locator(selector).count() > 0:
+                            if await page.locator(selector).first.is_visible():
+                                self.logger.info(f"[+] 检测到视频信息编辑区域，认为上传完成")
+                                return
+
+                # 如果没有找到任何完成标志，继续等待
+                if retry_count % 10 == 0:
+                    self.logger.info("[-] 视频正在上传中...")
+
+            except Exception as e:
+                self.logger.debug(f"[-] 检测上传状态时出错: {str(e)}，继续等待...")
+
+            await asyncio.sleep(1)
+            retry_count += 1
+
+        self.logger.warning("[!] 超过最大等待时间，视频上传可能未完成，但继续后续操作")
 
     async def _fill_video_info(self, page: Page, title: str, content: str, tags: List[str]):
         """
@@ -162,17 +218,61 @@ class DouYinUploader(BaseUploader):
                 await page.keyboard.type(title)
                 await page.keyboard.press("Enter")
 
-        css_selector = ".zone-container"
-        await page.type(css_selector, content)
+        # 填写描述
+        description_selector = ".zone-container"
+        desc_element = page.locator(description_selector)
+        await desc_element.click()
+        await desc_element.fill(content)
 
-        for tag in tags:
-            if not tag.startswith("#"):
-                await page.type(css_selector, "#" + tag)
-            else:
-                await page.type(css_selector, tag)
-            await page.press(css_selector, "Space")
+        # 添加标签
+        added_tags = 0
+        for i, tag in enumerate(tags):
+            clean_tag = tag.lstrip("#")
+            full_tag = f"#{clean_tag}"
+            self.logger.debug(f"[DEBUG] 添加第 {i+1} 个标签: {full_tag}")
 
-        self.logger.info(f"总共添加{len(tags)}个话题")
+            # 尝试多种方式添加标签
+            try:
+                # 确保光标在编辑器末尾
+                await desc_element.focus()
+                await page.keyboard.press("End")
+                await page.wait_for_timeout(800)  # 增加延迟，确保光标移动到位
+                
+                # 添加一个空格作为分隔符
+                await desc_element.type(" ")
+                await page.wait_for_timeout(800)  # 增加延迟，确保空格输入完成
+
+                # 按照小红书的顺序添加标签：输入#号→输入文字→按回车
+                await desc_element.type("#")
+                await page.wait_for_timeout(500)  # 增加延迟，确保#号输入完成
+                
+                await desc_element.type(clean_tag)
+                await page.wait_for_timeout(1000)  # 增加延迟，确保标签文字输入完成
+                
+                await page.keyboard.press("Enter")
+                
+                added_tags += 1
+                self.logger.debug(f"[DEBUG] 成功添加标签: {full_tag}")
+
+            except Exception as e:
+                self.logger.warning(f"[-] 添加标签 {full_tag} 时出现问题: {e}，尝试直接输入")
+                # 如果上述方式失败，直接追加到内容后面
+                try:
+                    await desc_element.focus()
+                    await page.keyboard.press("End")
+                    await desc_element.type(f" #{clean_tag} ")
+                    await page.wait_for_timeout(500)
+                    added_tags += 1
+                    self.logger.debug(f"[DEBUG] 直接追加标签成功: {full_tag}")
+                except Exception as e2:
+                    self.logger.error(f"[!] 直接追加标签 {full_tag} 也失败了: {e2}")
+
+            # 添加标签后跳转到最后
+            await desc_element.focus()
+            await page.keyboard.press("End")
+            await page.wait_for_timeout(800)  # 增加延迟，确保光标移动到末尾
+
+        self.logger.info(f"[+] 标题和{added_tags}个标签已添加 (共{len(tags)}个标签)")
 
     async def _set_thumbnail(self, page: Page, thumbnail_path: Optional[str | Path]):
         """
@@ -183,18 +283,66 @@ class DouYinUploader(BaseUploader):
             thumbnail_path: 封面图片路径
         """
         if not thumbnail_path:
+            self.logger.info("[-] 未指定封面路径，跳过封面设置")
             return
 
-        self.logger.info("[-] 正在设置视频封面...")
-        await page.click('text="选择封面"')
-        await page.wait_for_selector("div.dy-creator-content-modal")
-        await page.click('text="设置竖封面"')
-        await page.wait_for_timeout(2000)
-        await page.locator("div[class^='semi-upload upload'] >> input.semi-upload-hidden-input").set_input_files(thumbnail_path)
-        await page.wait_for_timeout(2000)
-        await page.locator("button:visible:has-text('完成')").click()
-        self.logger.info("[+] 视频封面设置完成！")
-        await page.wait_for_selector("div.extractFooter", state='detached')
+        if not Path(thumbnail_path).exists():
+            self.logger.warning(f"[!] 封面文件不存在: {thumbnail_path}，跳过封面设置")
+            return
+
+        start_time = time.time()
+        self.logger.debug(f"[DEBUG] _set_thumbnail 开始执行: {start_time}")
+
+        try:
+            self.logger.info("[-] 正在设置视频封面...")
+
+            # 等待封面设置按钮出现
+            cover_selectors = [
+                'text="选择封面"',
+                'button:has-text("选择封面")',
+                'div[class*="cover"]'
+            ]
+
+            # 使用通用方法点击封面设置按钮
+            if not await self._click_first_visible_element(page, cover_selectors, "封面设置按钮", 2000):
+                self.logger.warning("[!] 未找到封面设置按钮，跳过封面设置")
+                return
+
+            # 等待封面设置所需元素加载完成
+            try:
+                await page.wait_for_selector("div.dy-creator-content-modal", timeout=10000)
+                self.logger.info("[+] 封面设置模态框已出现")
+            except Exception as e:
+                self.logger.warning(f"[!] 等待封面设置模态框时出错: {e}")
+                return
+
+            # 设置竖封面
+            await self._click_first_visible_element(page, ['text="设置竖封面"'], "设置竖封面按钮", 2000)
+
+            # 使用通用方法上传封面图片
+            file_input_selectors = [
+                "div[class^='semi-upload upload'] >> input.semi-upload-hidden-input",
+                "input[type='file'][accept*='image']",
+                "input[accept*='image/png']"
+            ]
+            
+            if not await self._upload_file_to_first_input(page, file_input_selectors, thumbnail_path, "image"):
+                self.logger.error("[!] 未能上传封面图片")
+                return
+
+            # 等待上传完成
+            await page.wait_for_timeout(2000)
+
+            # 点击完成按钮
+            if await self._click_first_visible_element(page, ['button:visible:has-text("完成")'], "完成按钮", 2000):
+                self.logger.info("[+] 视频封面设置完成！")
+                await page.wait_for_selector("div.extractFooter", state='detached')
+            else:
+                self.logger.error("[!] 未能点击完成按钮")
+
+        except Exception as e:
+            self.logger.error(f"[!] 设置封面时出错: {e}")
+            return
 
     async def _set_schedule_time(self, page: Page, publish_date: datetime):
         """
@@ -214,6 +362,66 @@ class DouYinUploader(BaseUploader):
         await page.keyboard.type(str(publish_date_hour))
         await page.keyboard.press("Enter")
         await page.wait_for_timeout(500)
+
+    async def _click_first_visible_element(self, page: Page, selectors: List[str], description: str = "元素", wait_after: int = 0) -> bool:
+        """
+        点击第一个可见的元素
+
+        Args:
+            page: 页面实例
+            selectors: 选择器列表
+            description: 元素描述（用于日志）
+            wait_after: 点击后等待时间（毫秒）
+
+        Returns:
+            是否成功点击
+        """
+        for selector in selectors:
+            try:
+                element = page.locator(selector)
+                count = await element.count()
+                if count > 0:
+                    for i in range(count):
+                        btn = element.nth(i)
+                        is_visible = await btn.is_visible()
+                        if is_visible:
+                            await btn.click(force=True, timeout=3000)
+                            self.logger.info(f"[+] 已点击{description}: {selector}")
+                            if wait_after > 0:
+                                await page.wait_for_timeout(wait_after)
+                            return True
+            except Exception:
+                continue
+        return False
+
+    async def _upload_file_to_first_input(self, page: Page, selectors: List[str], file_path: str | Path, accept_type: str = "image") -> bool:
+        """
+        上传文件到第一个匹配的输入框
+
+        Args:
+            page: 页面实例
+            selectors: 选择器列表
+            file_path: 文件路径
+            accept_type: 接受的文件类型
+
+        Returns:
+            是否成功上传
+        """
+        for selector in selectors:
+            try:
+                file_input = page.locator(selector)
+                count = await file_input.count()
+                if count > 0:
+                    for i in range(count):
+                        input_elem = file_input.nth(i)
+                        accept = await input_elem.get_attribute('accept')
+                        if accept and (accept_type in accept or accept == '*'):
+                            await input_elem.set_input_files(file_path)
+                            self.logger.info(f"[+] 已上传{accept_type}文件")
+                            return True
+            except Exception:
+                continue
+        return False
 
     async def _set_third_party_platforms(self, page: Page):
         """
