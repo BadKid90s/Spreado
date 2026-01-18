@@ -1,10 +1,14 @@
 import asyncio
-from pathlib import Path
 
-from conf import BASE_DIR
-from uploader.douyin_uploader.main import douyin_setup
+from uploader.douyin_uploader import DouYinUploader
+from uploader.auth_manager import AuthManager
 
 if __name__ == '__main__':
-    account_file = Path(BASE_DIR  / "cookies" / "douyin_uploader" / "account.json")
-    account_file.parent.mkdir(parents=True, exist_ok=True)
-    cookie_setup = asyncio.run(douyin_setup(str(account_file), handle=True))
+    uploader = DouYinUploader(headless=False)
+    auth_manager = AuthManager(uploader)
+    
+    result = asyncio.run(auth_manager.perform_login(headless=False))
+    if result:
+        print("抖音认证成功！")
+    else:
+        print("抖音认证失败！")

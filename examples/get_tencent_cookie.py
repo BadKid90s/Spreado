@@ -1,10 +1,14 @@
 import asyncio
-from pathlib import Path
 
-from conf import BASE_DIR
-from uploader.tencent_uploader.main import weixin_setup
+from uploader.tencent_uploader import TencentUploader
+from uploader.auth_manager import AuthManager
 
 if __name__ == '__main__':
-    account_file = Path(BASE_DIR  / "cookies" / "tencent_uploader" / "account.json")
-    account_file.parent.mkdir(parents=True, exist_ok=True)
-    cookie_setup = asyncio.run(weixin_setup(str(account_file), handle=True))
+    uploader = TencentUploader(headless=False)
+    auth_manager = AuthManager(uploader)
+    
+    result = asyncio.run(auth_manager.perform_login(headless=False))
+    if result:
+        print("腾讯视频认证成功！")
+    else:
+        print("腾讯视频认证失败！")

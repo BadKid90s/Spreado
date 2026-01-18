@@ -1,38 +1,45 @@
 import asyncio
 from pathlib import Path
+from datetime import datetime, timedelta
 
-from uploader.xiaohongshu_uploader.main import xiaohongshu_setup, XiaoHongShuVideo
-from utils.files_times import generate_schedule_time_next_day, get_title_and_hashtags
-
-BASE_DIR = Path(__file__).parent.resolve()
+from conf import BASE_DIR
+from uploader.xiaohongshu_uploader import XiaoHongShuUploader
+from uploader.auth_manager import AuthManager
+from utils.files_times import get_title_and_hashtags
 
 if __name__ == '__main__':
     filepath = Path(BASE_DIR) / "examples" / "videos"
-    account_file = Path(BASE_DIR / "cookies" / "xiaohongshu_uploader" / "account.json")
-    cookie_setup = asyncio.run(xiaohongshu_setup(account_file, handle=False))
 
-    # 使用固定路径的demo文件
     folder_path = Path(filepath)
     file_path = folder_path / "demo.mp4"
     thumbnail_path = folder_path / "demo.png"
     txt_path = folder_path / "demo.txt"
 
     title, content, tags = get_title_and_hashtags(str(txt_path))
-    # 打印视频文件信息
     print(f"视频文件名：{file_path}")
     print(f"标题：{title}")
     print(f"Hashtag：{tags}")
 
-    # 设置发布时间为当前时间2小时后
-    from datetime import datetime, timedelta
     publish_time = datetime.now() + timedelta(hours=2)
 
-    app = XiaoHongShuVideo(title=title,
-                           content=content,
-                           tags=tags,
-                           file_path=file_path,
-                           account_file=account_file,
-                           publish_date=publish_time,
-                           thumbnail_path=thumbnail_path,
-                           )
-    asyncio.run(app.main(), debug=False)
+    uploader = XiaoHongShuUploader(headless=True)
+    auth_manager = AuthManager(uploader)
+    
+    async def upload():
+        if await auth_manager.ensure_authenticated(auto_login=False):
+            result = await uploader.upload_video(
+                file_path=file_path,
+                title=title,
+                content=content,
+                tags=tags,
+                publish_date=publish_time,
+                thumbnail_path=thumbnail_path
+            )
+            if result:
+                print("视频上传成功！")
+            else:
+                print("视频上传失败！")
+        else:
+            print("认证失败，请先运行 get_xiaohongshu_cookie.py 获取认证信息")
+
+    asyncio.run(upload())

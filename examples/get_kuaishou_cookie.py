@@ -1,10 +1,14 @@
 import asyncio
-from pathlib import Path
 
-from conf import BASE_DIR
-from uploader.kuaishou_uploader.main import kuaishou_setup
+from uploader.kuaishou_uploader import KuaiShouUploader
+from uploader.auth_manager import AuthManager
 
 if __name__ == '__main__':
-    account_file = Path(BASE_DIR / "cookies" / "kuaishou_uploader" / "account.json")
-    account_file.parent.mkdir(parents=True, exist_ok=True)
-    cookie_setup = asyncio.run(kuaishou_setup(str(account_file), handle=True))
+    uploader = KuaiShouUploader(headless=False)
+    auth_manager = AuthManager(uploader)
+    
+    result = asyncio.run(auth_manager.perform_login(headless=False))
+    if result:
+        print("快手认证成功！")
+    else:
+        print("快手认证失败！")

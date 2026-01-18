@@ -1,11 +1,14 @@
 import asyncio
-from pathlib import Path
 
-from uploader.xiaohongshu_uploader.main import xiaohongshu_setup
-
-BASE_DIR = Path(__file__).parent.resolve()
+from uploader.xiaohongshu_uploader import XiaoHongShuUploader
+from uploader.auth_manager import AuthManager
 
 if __name__ == '__main__':
-    account_file = Path(BASE_DIR / "cookies" / "xiaohongshu_uploader" / "account.json")
-    account_file.parent.mkdir(parents=True, exist_ok=True)
-    cookie_setup = asyncio.run(xiaohongshu_setup(str(account_file), handle=True))
+    uploader = XiaoHongShuUploader(headless=False)
+    auth_manager = AuthManager(uploader)
+    
+    result = asyncio.run(auth_manager.perform_login(headless=False))
+    if result:
+        print("小红书认证成功！")
+    else:
+        print("小红书认证失败！")
