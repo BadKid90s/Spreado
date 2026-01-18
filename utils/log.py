@@ -1,9 +1,17 @@
 from pathlib import Path
 from typing import Optional
+import logging
 
 from loguru import logger
 
+import conf
 from conf import BASE_DIR
+
+# 配置基础日志设置 - 从conf.py移动过来
+logging.basicConfig(
+    level=conf.LOG_LEVEL,
+    format='%(asctime)s | %(levelname)-8s | %(name)s:%(funcName)s:%(lineno)d - %(message)s'
+)
 
 
 def log_formatter(record: dict) -> str:
@@ -16,16 +24,28 @@ def log_formatter(record: dict) -> str:
     Returns:
         格式化后的日志字符串
     """
+    # 去除SUCCESS级别，将其映射到INFO级别
+    if record["level"].name == "SUCCESS":
+        record["level"].name = "INFO"
+    
     colors = {
         "TRACE": "#cfe2f3",
         "INFO": "#9cbfdd",
         "DEBUG": "#8598ea",
         "WARNING": "#dcad5a",
-        "SUCCESS": "#3dd08d",
         "ERROR": "#ae2c2c"
     }
     color = colors.get(record["level"].name, "#b3cfe7")
     return f"<fg #70acde>{{time:YYYY-MM-DD HH:mm:ss}}</fg #70acde> | <fg {color}>{{level}}</fg {color}>: <light-white>{{message}}</light-white>\n"
+
+
+# 配置loguru的控制台输出日志级别
+logger.remove()  # 移除默认的控制台输出
+logger.add(
+    sink=lambda msg: print(msg, end=""),
+    level=conf.CONSOLE_LOG_LEVEL,
+    format=log_formatter
+)
 
 
 def create_logger(log_name: str, file_path: str):
@@ -43,7 +63,7 @@ def create_logger(log_name: str, file_path: str):
         return record["extra"].get("business_name") == log_name
 
     Path(BASE_DIR / file_path).parent.mkdir(exist_ok=True)
-    logger.add(Path(BASE_DIR / file_path), filter=filter_record, level="INFO", rotation="10 MB", retention="10 days", backtrace=True, diagnose=True)
+    logger.add(Path(BASE_DIR / file_path), filter=filter_record, level=conf.LOG_LEVEL, rotation="10 MB", retention="10 days", backtrace=True, diagnose=True)
     return logger.bind(business_name=log_name)
 
 
