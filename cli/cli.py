@@ -1,9 +1,13 @@
 import argparse
 import asyncio
 import sys
+import os
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, List
+
+# 设置PYTHONPATH为项目根目录
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from uploader.douyin_uploader import DouYinUploader
 from uploader.xiaohongshu_uploader import XiaoHongShuUploader
@@ -189,11 +193,13 @@ async def upload_action(
     if publish_date:
         try:
             publish_datetime = datetime.strptime(publish_date, "%Y-%m-%d %H:%M")
+            logger.info(f"[+] 定时发布时间: {publish_datetime}")
         except ValueError:
             logger.error(f"[!] 发布时间格式错误，请使用: YYYY-MM-DD HH:MM")
             return False
     else:
         publish_datetime = None
+        logger.info("[+] 使用即时发布")
 
     logger.info(f"[+] 开始上传视频到 {platform} 平台...")
     logger.info(f"    视频文件: {file_path}")
@@ -205,23 +211,49 @@ async def upload_action(
     if publish_datetime:
         logger.info(f"    定时发布: {publish_datetime}")
 
-    result = await uploader.upload(
-        file_path=file_path,
-        title=title,
-        content=content,
-        tags=tags,
-        publish_date=publish_datetime,
-        thumbnail_path=thumbnail,
-        auto_login=auto_login,
-        **kwargs
-    )
+    # 直接调用upload_video方法，避免重复的Cookie验证（特别是抖音平台）
+    # 但仍然需要确保Cookie有效
+    if not uploader.account_file.exists():
+        logger.error("[!] 账户文件不存在")
+        if auto_login:
+            logger.info("[+] 尝试自动登录...")
+            from uploader.auth_manager import AuthManager
+            auth_manager = AuthManager(uploader)
+            login_success = await auth_manager.perform_login(headless=False)
+            if not login_success:
+                logger.error("[!] 自动登录失败")
+                return False
+        else:
+            logger.error("[!] 请先登录获取Cookie")
+            return False
 
-    if result:
-        logger.info(f"[+] 视频上传成功")
-    else:
-        logger.error(f"[!] 视频上传失败")
+    try:
+        result = await uploader.upload_video(
+            file_path=file_path,
+            title=title,
+            content=content,
+            tags=tags,
+            publish_date=publish_datetime,
+            thumbnail_path=thumbnail,
+            **kwargs
+        )
 
-    return result
+        if result:
+            # 上传成功后保存Cookie
+            if hasattr(uploader, '_save_cookie') and callable(uploader._save_cookie):
+                await uploader._save_cookie()
+            logger.info(f"[+] 视频上传成功")
+        else:
+            logger.error(f"[!] 视频上传失败")
+
+        return result
+    except Exception as e:
+        logger.error(f"[!] 上传视频时出错: {e}")
+        return False
+    finally:
+        # 确保资源清理
+        if hasattr(uploader, '_cleanup_resources') and callable(uploader._cleanup_resources):
+            await uploader._cleanup_resources()
 
 
 def main():
