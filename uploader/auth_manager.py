@@ -67,7 +67,7 @@ class AuthManager:
                 result = await self.uploader.headful_login_flow()
 
             if result:
-                self.logger.success("[+] 登录成功")
+                self.logger.info("[+] 登录成功")
             else:
                 self.logger.error("[!] 登录失败")
 

@@ -93,7 +93,7 @@ class TencentUploader(BaseUploader):
 
             is_draft = kwargs.get("is_draft", False)
             await self._publish_video(page, is_draft)
-            self.logger.success("[-] 视频发布成功")
+            self.logger.info("[-] 视频发布成功")
 
             return True
 
@@ -109,8 +109,40 @@ class TencentUploader(BaseUploader):
             page: 页面实例
             file_path: 视频文件路径
         """
-        file_input = page.locator('input[type="file"]')
-        await file_input.set_input_files(file_path)
+        # 保存文件路径用于错误处理
+        self.file_path = file_path
+        
+        # 尝试多种定位方式查找文件输入框
+        file_input_selectors = [
+            'input[type="file"]',
+            'div.upload-container input[type="file"]',
+            'div.video-upload-area input[type="file"]',
+            'input[type="file"][accept="video/*"]'
+        ]
+        
+        for selector in file_input_selectors:
+            try:
+                self.logger.info(f"[+] 尝试使用选择器查找文件输入框: {selector}")
+                file_input = page.locator(selector)
+                await file_input.wait_for(state='visible', timeout=5000)
+                await file_input.set_input_files(file_path)
+                self.logger.info(f"[+] 文件上传输入框找到并上传成功: {selector}")
+                return
+            except Exception as e:
+                self.logger.warning(f"[!] 选择器 {selector} 查找失败: {e}")
+                continue
+        
+        # 如果所有选择器都失败，尝试通过文件选择器机制上传
+        try:
+            self.logger.info("[+] 尝试使用文件选择器机制上传文件")
+            async with page.expect_file_chooser(timeout=10000) as fc_info:
+                await page.click('button:has-text("上传")', timeout=5000)
+            file_chooser = await fc_info.value
+            await file_chooser.set_files(file_path)
+            self.logger.info("[+] 文件选择器机制上传成功")
+        except Exception as e:
+            self.logger.error(f"[!] 所有文件上传尝试都失败: {e}")
+            raise
 
     async def _fill_video_info(self, page: Page, title: str, content: str, tags: List[str]):
         """
@@ -212,17 +244,17 @@ class TencentUploader(BaseUploader):
         while True:
             try:
                 if "weui-desktop-btn_disabled" not in await page.get_by_role("button", name="发表").get_attribute('class'):
-                    self.logger.info("[-] 视频上传完毕")
+                    self.logger.info("[+]  视频上传完毕")
                     break
                 else:
-                    self.logger.info("[-] 正在上传视频中...")
+                    self.logger.info("[+]  正在上传视频中...")
                     await page.wait_for_timeout(1000)
 
                     if await page.locator('div.status-msg.error').count() and await page.locator('div.media-status-content div.tag-inner:has-text("删除")').count():
                         self.logger.error("[-] 发现上传出错了...准备重试")
                         await self._handle_upload_error(page)
             except:
-                self.logger.info("[-] 正在上传视频中...")
+                self.logger.info("[+]  正在上传视频中...")
                 await page.wait_for_timeout(1000)
 
     async def _handle_upload_error(self, page: Page):
@@ -321,23 +353,23 @@ class TencentUploader(BaseUploader):
                     if await draft_button.count():
                         await draft_button.click()
                     await page.wait_for_url("**/post/list**", timeout=5000)
-                    self.logger.success("[-] 视频草稿保存成功")
+                    self.logger.info("[-] 视频草稿保存成功")
                 else:
                     publish_button = page.locator('div.form-btns button:has-text("发表")')
                     if await publish_button.count():
                         await publish_button.click()
                     await page.wait_for_url(self.success_url_pattern, timeout=5000)
-                    self.logger.success("[-] 视频发布成功")
+                    self.logger.info("[-] 视频发布成功")
                 break
             except Exception as e:
                 current_url = page.url
                 if is_draft:
                     if "post/list" in current_url or "draft" in current_url:
-                        self.logger.success("[-] 视频草稿保存成功")
+                        self.logger.info("[-] 视频草稿保存成功")
                         break
                 else:
                     if self.success_url_pattern in current_url:
-                        self.logger.success("[-] 视频发布成功")
+                        self.logger.info("[-] 视频发布成功")
                         break
                 self.logger.exception(f"[-] Exception: {e}")
                 self.logger.info("[-] 视频正在发布中...")

@@ -118,7 +118,7 @@ class XiaoHongShuUploader(BaseUploader):
             
             total_time = time.time() - start_time
             self.logger.info(f"[DEBUG] upload_video 总耗时: {total_time:.2f}秒")
-            self.logger.success("[-] 视频发布成功")
+            self.logger.info("[-] 视频发布成功")
 
             return True
 
@@ -611,7 +611,7 @@ class XiaoHongShuUploader(BaseUploader):
             # 等待导航完成或超时（最多30秒）
             try:
                 await asyncio.wait_for(navigation_completed.wait(), timeout=30.0)
-                self.logger.success("[-] 视频发布成功")
+                self.logger.info("[-] 视频发布成功")
             except asyncio.TimeoutError:
                 self.logger.warning("[!] 等待页面导航超时")
                 
@@ -621,13 +621,13 @@ class XiaoHongShuUploader(BaseUploader):
                 
                 # 检查是否已成功
                 if "/success" in current_url or "published=true" in current_url:
-                    self.logger.success("[-] 视频发布成功")
+                    self.logger.info("[-] 视频发布成功")
                 else:
                     # 检查导航历史
                     self.logger.debug(f"[DEBUG] 导航历史: {navigation_history}")
                     # 虽然超时，但发布按钮已点击，可能已发布
                     self.logger.warning(f"[!] 发布后未检测到预期的成功URL，但已完成发布流程")
-                    self.logger.success("[-] 视频发布成功")
+                    self.logger.info("[-] 视频发布成功")
         
         except Exception as e:
             self.logger.error(f"[!] 发布视频时出错: {e}")
@@ -638,7 +638,7 @@ class XiaoHongShuUploader(BaseUploader):
             self.logger.debug(f"[DEBUG] 导航历史: {navigation_history}")
             
             if "/success" in current_url or "published=true" in current_url:
-                self.logger.success("[-] 视频发布成功")
+                self.logger.info("[-] 视频发布成功")
             else:
                 raise
         finally:

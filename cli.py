@@ -79,7 +79,7 @@ async def login_action(platform: str, headless: bool = False):
     result = await auth_manager.perform_login(headless=headless)
 
     if result:
-        logger.success(f"[+] {platform} 平台登录成功")
+        logger.info(f"[+] {platform} 平台登录成功")
     else:
         logger.error(f"[!] {platform} 平台登录失败")
 
@@ -217,7 +217,7 @@ async def upload_action(
     )
 
     if result:
-        logger.success(f"[+] 视频上传成功")
+        logger.info(f"[+] 视频上传成功")
     else:
         logger.error(f"[!] 视频上传失败")
 

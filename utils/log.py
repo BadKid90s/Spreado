@@ -24,9 +24,6 @@ def log_formatter(record: dict) -> str:
     Returns:
         格式化后的日志字符串
     """
-    # 去除SUCCESS级别，将其映射到INFO级别
-    if record["level"].name == "SUCCESS":
-        record["level"].name = "INFO"
     
     colors = {
         "TRACE": "#cfe2f3",
@@ -36,7 +33,7 @@ def log_formatter(record: dict) -> str:
         "ERROR": "#ae2c2c"
     }
     color = colors.get(record["level"].name, "#b3cfe7")
-    return f"<fg #70acde>{{time:YYYY-MM-DD HH:mm:ss}}</fg #70acde> | <fg {color}>{{level}}</fg {color}>: <light-white>{{message}}</light-white>\n"
+    return f"<fg #70acde>{{time:YYYY-MM-DD HH:mm:ss Z}}</fg #70acde> | <fg {color}>{{level}}</fg {color}>: <light-white>{{message}}</light-white>\n"
 
 
 # 配置loguru的控制台输出日志级别

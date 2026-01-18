@@ -104,7 +104,7 @@ class BrowserInstanceManager:
 
 
 from utils.base_social_media import set_init_script
-from utils.log import get_logger
+from utils.uploader_log import get_uploader_logger
 
 
 class BaseUploader(ABC):
@@ -127,7 +127,7 @@ class BaseUploader(ABC):
             self.account_file = Path(account_file)
         self.account_file.parent.mkdir(parents=True, exist_ok=True)
         self.headless = headless if headless is not None else True
-        self.logger = get_logger(self.platform_name)
+        self.logger = get_uploader_logger(self.platform_name)
         self.local_executable_path = self._get_chrome_path()
         self._browser: Optional[Browser] = None
         self._context: Optional[BrowserContext] = None
@@ -546,7 +546,7 @@ class BaseUploader(ABC):
 
             if result:
                 await self._save_cookie()
-                self.logger.success(f"[+] 视频上传成功: {title}")
+                self.logger.info(f"[+] 视频上传成功: {title}")
             else:
                 self.logger.error(f"[!] 视频上传失败: {title}")
 

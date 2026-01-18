@@ -87,7 +87,7 @@ class KuaiShouUploader(BaseUploader):
                 await self._set_schedule_time(page, publish_date)
 
             await self._publish_video(page)
-            self.logger.success("[-] 视频发布成功")
+            self.logger.info("[-] 视频发布成功")
 
             return True
 
@@ -144,7 +144,7 @@ class KuaiShouUploader(BaseUploader):
                         try:
                             element = page.locator(selector)
                             if await element.count() > 0 and await element.first.is_visible():
-                                self.logger.success("视频上传完毕")
+                                self.logger.info("视频上传完毕")
                                 return
                         except:
                             continue

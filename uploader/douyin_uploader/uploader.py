@@ -100,7 +100,7 @@ class DouYinUploader(BaseUploader):
                 await self._set_product_link(page, product_link, product_title)
 
             await self._publish_video(page)
-            self.logger.success("[-] 视频发布成功")
+            self.logger.info("[-] 视频发布成功")
 
             return True
 
