@@ -22,7 +22,7 @@ if __name__ == '__main__':
 
     publish_time = datetime.now() + timedelta(hours=2)
 
-    uploader = XiaoHongShuUploader(headless=True)
+    uploader = XiaoHongShuUploader(headless=False)
     auth_manager = AuthManager(uploader)
     
     async def upload():

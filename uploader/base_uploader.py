@@ -8,7 +8,7 @@ import platform
 import os
 import threading
 
-from conf import BASE_DIR, LOCAL_CHROME_HEADLESS
+from conf import BASE_DIR
 
 
 class BrowserInstanceManager:
@@ -126,7 +126,7 @@ class BaseUploader(ABC):
         else:
             self.account_file = Path(account_file)
         self.account_file.parent.mkdir(parents=True, exist_ok=True)
-        self.headless = LOCAL_CHROME_HEADLESS if headless is None else headless
+        self.headless = headless if headless is not None else True
         self.logger = get_logger(self.platform_name)
         self.local_executable_path = self._get_chrome_path()
         self._browser: Optional[Browser] = None
