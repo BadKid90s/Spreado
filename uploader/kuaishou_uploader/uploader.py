@@ -332,8 +332,8 @@ class KuaiShouUploader(BaseUploader):
             page: 页面实例
             publish_date: 发布时间
         """
-        self.logger.info(f"设置定时发布时间为: {publish_date_hour}")
         publish_date_hour = publish_date.strftime("%Y-%m-%d %H:%M:%S")
+        self.logger.info(f"设置定时发布时间为: {publish_date_hour}")
         await page.locator("label:text('发布时间')").locator('xpath=following-sibling::div').locator('.ant-radio-input').nth(1).click()
         await page.wait_for_selector('div.ant-picker-input input[placeholder="选择日期时间"]', state='visible', timeout=5000)
         
