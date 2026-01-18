@@ -12,5 +12,3 @@ LOG_LEVEL = "INFO"  # 设置日志级别为INFO，只打印INFO及以上级别�
 # 控制台日志级别
 CONSOLE_LOG_LEVEL = "INFO"  # 控制台输出的日志级别
 
-
-
