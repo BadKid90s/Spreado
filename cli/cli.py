@@ -1,13 +1,9 @@
 import argparse
 import asyncio
 import sys
-import os
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, List
-
-# 设置PYTHONPATH为项目根目录
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from uploader.douyin_uploader import DouYinUploader
 from uploader.xiaohongshu_uploader import XiaoHongShuUploader
@@ -40,7 +36,8 @@ def get_account_file(platform: str) -> Path:
     Returns:
         账户文件路径
     """
-    return Path(__file__).parent / "cookies" / f"{platform}_uploader" / "account.json"
+    from conf import COOKIES_DIR
+    return COOKIES_DIR / f"{platform}_uploader" / "account.json"
 
 
 def get_uploader(platform: str, headless: bool = None) -> Optional:
