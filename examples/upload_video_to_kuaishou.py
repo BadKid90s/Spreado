@@ -23,7 +23,7 @@ async def main():
 
     publish_time = datetime.now() + timedelta(hours=2)
 
-    uploader = await KuaiShouUploader().start()
+    uploader =  KuaiShouUploader()
 
     await uploader.verify_cookie(auto_login=False)
 
@@ -39,7 +39,6 @@ async def main():
         print(f"{uploader.platform_name}视频上传成功！")
     else:
         print(f"{uploader.platform_name}视频上传失败！")
-    await uploader.close()
 
 
 if __name__ == '__main__':

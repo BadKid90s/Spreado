@@ -22,11 +22,11 @@ async def main():
 
     publish_time = datetime.now() + timedelta(hours=2)
 
-    uploader = await XiaoHongShuUploader().start()
+    uploader = XiaoHongShuUploader()
 
     await uploader.verify_cookie(auto_login=False)
 
-    result = await uploader.upload_video(
+    result = await uploader.upload(
         file_path=file_path,
         title=title,
         content=content,
@@ -38,7 +38,6 @@ async def main():
         print(f"{uploader.platform_name}视频上传成功！")
     else:
         print(f"{uploader.platform_name}视频上传失败！")
-    await uploader.close()
 
 
 if __name__ == '__main__':

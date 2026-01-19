@@ -20,7 +20,7 @@ class StealthBrowser:
 
 
     @classmethod
-    async def create(cls, headless: bool = False) -> "StealthBrowser":
+    async def create(cls, headless: bool = True) -> "StealthBrowser":
         """工厂方法"""
         instance = cls(headless)
         await instance.__aenter__()
@@ -67,17 +67,17 @@ class StealthBrowser:
         从 JSON 文件加载 Cookie 并注入到当前上下文
         自动处理类型转换，消除 IDE 报错
         """
-        # if not self.context:
-        #     raise RuntimeError("Context 未初始化")
-        #
-        # path = Path(file_path)
-        # if not path.exists():
-        #     print(f"[警告] Cookie 文件不存在: {path}")
-        #     return
-        #
-        # context_options = {"storage_state": str(file_path)}
-        # # 注入 Cookie
-        # await self.context.add_cookies(**context_options)
+        if not self.context:
+            raise RuntimeError("Context 未初始化")
+
+        path = Path(file_path)
+        if not path.exists():
+            print(f"[警告] Cookie 文件不存在: {path}")
+            return
+
+        context_options = {"storage_state": str(file_path)}
+        # 注入 Cookie
+        await self.context.add_cookies(**context_options)
 
     async def storage_state(self, path: Path | str):
         """保存当前 Cookie 到文件"""

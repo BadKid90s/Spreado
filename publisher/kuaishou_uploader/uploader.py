@@ -26,6 +26,10 @@ class KuaiShouUploader(BaseUploader):
         return "https://cp.kuaishou.com"
 
     @property
+    def login_success_url(self) -> str:
+        return ""
+
+    @property
     def upload_url(self) -> str:
         return "https://cp.kuaishou.com/article/publish/video"
 
@@ -44,6 +48,7 @@ class KuaiShouUploader(BaseUploader):
 
     async def upload_video(
         self,
+        page: Page,
         file_path: str | Path,
         title: str,
         content: str,
@@ -56,6 +61,7 @@ class KuaiShouUploader(BaseUploader):
         上传视频到快手
 
         Args:
+            page: 页面
             file_path: 视频文件路径
             title: 视频标题
             content: 视频描述
@@ -68,7 +74,6 @@ class KuaiShouUploader(BaseUploader):
             上传是否成功
         """
         try:
-            page = await self.browser.new_page()
 
             await page.goto(self.upload_url)
             self.logger.info("[-] 正在打开上传页面...")

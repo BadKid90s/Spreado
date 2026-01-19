@@ -23,6 +23,10 @@ class XiaoHongShuUploader(BaseUploader):
         return "https://creator.xiaohongshu.com/"
 
     @property
+    def login_success_url(self) -> str:
+        return "https://creator.xiaohongshu.com/new/home"
+
+    @property
     def upload_url(self) -> str:
         return "https://creator.xiaohongshu.com/publish/publish?from=homepage&target=video"
 
@@ -41,6 +45,7 @@ class XiaoHongShuUploader(BaseUploader):
 
     async def upload_video(
         self,
+            page: Page,
         file_path: str | Path,
         title: str,
         content: str,
@@ -53,6 +58,7 @@ class XiaoHongShuUploader(BaseUploader):
         上传视频到小红书
 
         Args:
+            page: 页面
             file_path: 视频文件路径
             title: 视频标题
             content: 视频描述
@@ -68,7 +74,6 @@ class XiaoHongShuUploader(BaseUploader):
         self.logger.debug(f"[DEBUG] upload_video 开始执行: {start_time}")
         
         try:
-            page = await self.browser.new_page()
             self.logger.debug(f"[DEBUG] 页面初始化完成: {time.time() - start_time:.2f}秒")
 
             self.logger.info(f"[-] 正在打开上传页面...")
