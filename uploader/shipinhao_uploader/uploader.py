@@ -71,9 +71,10 @@ class ShipinhaoUploader(BaseUploader):
             self.logger.info(f"[-] 正在打开上传页面...")
             await page.wait_for_url(self.upload_url)
 
-            # 等待发布界面的finder-card元素可见
+            # 等待发布界面的加载元素隐藏（隐藏说明加载成功）
             self.logger.info(f"[-] 正在等待发布界面加载完成...")
-            await page.wait_for_selector('.finder-card.finder-card-flex', state='visible', timeout=30000)
+            loading_element = page.locator('.finder-page.PostCreate #container-wrap div.wrap')
+            await loading_element.wait_for(state='hidden', timeout=30000)
             self.logger.info(f"[-] 发布界面已加载完成")
 
             self.logger.info(f"[+] 正在处理视频: {title}")
@@ -136,6 +137,34 @@ class ShipinhaoUploader(BaseUploader):
         # 保存文件路径用于错误处理
         self.file_path = file_path
         
+        # 首先尝试找到并点击上传按钮
+        upload_button_selectors = [
+            '.finder-card.wrap',
+            'div.upload',
+            'div.upload-area',
+            'button:has-text("上传")',
+            'div:has-text("点击上传")',
+            'div:has-text("选择视频")'
+        ]
+        
+        # 尝试点击上传按钮
+        for upload_selector in upload_button_selectors:
+            try:
+                self.logger.info(f"[+] 尝试点击上传按钮: {upload_selector}")
+                upload_element = page.locator(upload_selector)
+                if await upload_element.count() > 0:
+                    # 如果找到多个元素，只点击第一个
+                    if await upload_element.count() > 1:
+                        self.logger.warning(f"[!] 找到多个匹配元素，点击第一个: {upload_selector}")
+                        await upload_element.first.click()
+                    else:
+                        await upload_element.click()
+                    self.logger.info(f"[+] 已点击上传按钮: {upload_selector}")
+                    await page.wait_for_timeout(2000)  # 等待可能的弹窗或文件选择器
+                    break
+            except Exception as e:
+                self.logger.warning(f"[!] 点击上传按钮 {upload_selector} 失败: {e}")
+        
         # 尝试多种定位方式查找文件输入框
         file_input_selectors = [
             'input[type="file"][accept="video/mp4,video/x-m4v,video/*"][multiple="multiple"]',
@@ -161,7 +190,7 @@ class ShipinhaoUploader(BaseUploader):
                 self.logger.warning(f"[!] 选择器 {selector} 查找失败: {e}")
                 continue
         
-        self.logger.error(f"[!] 所有文件上传尝试都失败: {e}")
+        self.logger.error(f"[!] 选择器查找失败，无法上传视频文件")
         return False
 
     async def _fill_video_info(self, page: Page, title: str, content: str, tags: List[str]) -> bool:
