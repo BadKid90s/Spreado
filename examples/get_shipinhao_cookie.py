@@ -1,14 +1,16 @@
 import asyncio
 
-from uploader.shipinhao_uploader import ShipinhaoUploader
-from uploader.auth_manager import AuthManager
+from publisher.shipinhao_uploader import ShipinhaoUploader
+
+
+async def main():
+    uploader = ShipinhaoUploader()
+    result = await uploader.login_flow()
+    if result:
+        print(f"{uploader.platform_name}认证成功！")
+    else:
+        print(f"{uploader.platform_name}认证失败！")
+    await uploader.close()
 
 if __name__ == '__main__':
-    uploader = ShipinhaoUploader(headless=False)
-    auth_manager = AuthManager(uploader)
-    
-    result = asyncio.run(auth_manager.perform_login(headless=False))
-    if result:
-        print("视频号认证成功！")
-    else:
-        print("视频号认证失败！")
+    asyncio.run(main())

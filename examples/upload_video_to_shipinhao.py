@@ -3,11 +3,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from conf import BASE_DIR
-from uploader.auth_manager import AuthManager
-from uploader.shipinhao_uploader import ShipinhaoUploader
+from publisher.shipinhao_uploader import ShipinhaoUploader
 from utils.files_times import get_title_and_hashtags
 
-if __name__ == '__main__':
+
+async def main():
     filepath = Path(BASE_DIR) / "examples" / "videos"
 
     folder_path = Path(filepath)
@@ -22,25 +22,24 @@ if __name__ == '__main__':
 
     publish_time = datetime.now() + timedelta(hours=2)
 
-    uploader = ShipinhaoUploader(headless=False)
-    auth_manager = AuthManager(uploader)
-    
-    async def upload():
-        if await auth_manager.ensure_authenticated(auto_login=False):
-            result = await uploader.upload_video(
-                file_path=file_path,
-                title=title,
-                content=content,
-                tags=tags,
-                publish_date=publish_time,
-                thumbnail_path=thumbnail_path,
-            )
-            if result:
-                print("视频上传成功！")
-            else:
-                print("视频上传失败！")
-        else:
-            print("认证失败，请先运行 get_shipinhao_cookie.py 获取认证信息")
+    uploader = ShipinhaoUploader()
 
-    asyncio.run(upload())
-    print("退出程序")
+    await uploader.verify_cookie(auto_login=False)
+
+    result = await uploader.upload_video(
+        file_path=file_path,
+        title=title,
+        content=content,
+        tags=tags,
+        publish_date=publish_time,
+        thumbnail_path=thumbnail_path
+    )
+    if result:
+        print(f"{uploader.platform_name}视频上传成功！")
+    else:
+        print(f"{uploader.platform_name}视频上传失败！")
+    await uploader.close()
+
+
+if __name__ == '__main__':
+    asyncio.run(main())

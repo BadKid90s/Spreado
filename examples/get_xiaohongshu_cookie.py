@@ -1,14 +1,16 @@
 import asyncio
 
-from uploader.xiaohongshu_uploader import XiaoHongShuUploader
-from uploader.auth_manager import AuthManager
+from publisher.xiaohongshu_uploader import XiaoHongShuUploader
+
+
+async def main():
+    uploader = XiaoHongShuUploader()
+    result = await uploader.login_flow()
+    if result:
+        print(f"{uploader.platform_name}认证成功！")
+    else:
+        print(f"{uploader.platform_name}认证失败！")
+    await uploader.close()
 
 if __name__ == '__main__':
-    uploader = XiaoHongShuUploader(headless=False)
-    auth_manager = AuthManager(uploader)
-    
-    result = asyncio.run(auth_manager.perform_login(headless=False))
-    if result:
-        print("小红书认证成功！")
-    else:
-        print("小红书认证失败！")
+    asyncio.run(main())
