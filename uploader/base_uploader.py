@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, List
 from playwright.async_api import Page, BrowserContext, Browser, Playwright
 import asyncio
 import platform
@@ -103,8 +103,7 @@ class BrowserInstanceManager:
         self._ref_count = 0
 
 
-from utils.base_social_media import set_init_script
-from utils.uploader_log import get_uploader_logger
+from utils.log import get_uploader_logger
 
 
 class BaseUploader(ABC):
@@ -259,7 +258,6 @@ class BaseUploader(ABC):
             context_options["storage_state"] = str(self.account_file)
 
         context = await browser.new_context(**context_options)
-        context = await set_init_script(context)
         self._context = context
         return context
 

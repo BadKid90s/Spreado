@@ -6,7 +6,6 @@ import time
 from playwright.async_api import Page
 import asyncio
 
-from utils.base_social_media import set_init_script
 from utils.log import create_logger
 from uploader.base_uploader import BaseUploader
 
