@@ -3,13 +3,10 @@ from pathlib import Path
 from typing import List, Optional
 import time
 
-from playwright.async_api import Page
+from playwright.async_api import Page, Error
 import asyncio
 
-from utils.log import create_logger
-from uploader.base_uploader import BaseUploader
-
-xiaohongshu_logger = create_logger("xiaohongshu", "logs/xiaohongshu.log")
+from publisher.uploader import BaseUploader
 
 
 class XiaoHongShuUploader(BaseUploader):
@@ -71,20 +68,14 @@ class XiaoHongShuUploader(BaseUploader):
         self.logger.debug(f"[DEBUG] upload_video 开始执行: {start_time}")
         
         try:
-            browser = await self._init_browser()
-            self.logger.debug(f"[DEBUG] 浏览器初始化完成: {time.time() - start_time:.2f}秒")
-            
-            context = await self._init_context(browser, use_cookie=True)
-            self.logger.debug(f"[DEBUG] 上下文初始化完成: {time.time() - start_time:.2f}秒")
-            
-            page = await self._init_page(context)
+            page = await self.browser.new_page()
             self.logger.debug(f"[DEBUG] 页面初始化完成: {time.time() - start_time:.2f}秒")
 
             self.logger.info(f"[-] 正在打开上传页面...")
             await page.goto(self.upload_url)
             try:
                 await page.wait_for_url(self.upload_url, timeout=5000)
-            except Exception:
+            except Error:
                 pass
             self.logger.debug(f"[DEBUG] 页面导航完成: {time.time() - start_time:.2f}秒")
 
@@ -368,7 +359,7 @@ class XiaoHongShuUploader(BaseUploader):
                             if wait_after > 0:
                                 await page.wait_for_timeout(wait_after)
                             return True
-            except Exception:
+            except Error:
                 continue
         return False
 
@@ -397,7 +388,7 @@ class XiaoHongShuUploader(BaseUploader):
                             await input_elem.set_input_files(file_path)
                             self.logger.info(f"[+] 已上传{accept_type}文件")
                             return True
-            except Exception:
+            except Error:
                 continue
         return False
 
@@ -650,8 +641,7 @@ class XiaoHongShuUploader(BaseUploader):
         import asyncio
         navigation_completed = asyncio.Event()
         navigation_history = []
-        is_published = False
-        
+
         # 定义导航事件处理函数
         async def on_framenavigated(frame):
             nonlocal navigation_history, is_published

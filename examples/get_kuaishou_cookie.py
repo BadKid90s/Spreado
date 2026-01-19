@@ -4,7 +4,7 @@ from publisher.kuaishou_uploader import KuaiShouUploader
 
 
 async def main():
-    uploader = KuaiShouUploader()
+    uploader = await KuaiShouUploader().start()
     result = await uploader.login_flow()
     if result:
         print(f"{uploader.platform_name}认证成功！")

@@ -4,7 +4,7 @@ from publisher.xiaohongshu_uploader import XiaoHongShuUploader
 
 
 async def main():
-    uploader = XiaoHongShuUploader()
+    uploader = await XiaoHongShuUploader().start()
     result = await uploader.login_flow()
     if result:
         print(f"{uploader.platform_name}认证成功！")

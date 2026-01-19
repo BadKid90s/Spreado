@@ -7,15 +7,12 @@ from playwright_stealth import Stealth
 
 
 class StealthBrowser:
-    def __init__(self, headless: bool = False, storage_state_path: Union[str, Path] = None):
+    def __init__(self, headless: bool = False):
         """
         :param headless: 是否无头模式
-        :param storage_state_path: (可选) Cookie JSON 文件路径 (例如 'auth.json')
         """
         self.headless = headless
 
-        # 1. 保存 Cookie 路径
-        self.storage_state_path = str(storage_state_path) if storage_state_path else None
 
         self.playwright: Optional[Playwright] = None
         self.browser: Optional[Browser] = None
@@ -23,9 +20,9 @@ class StealthBrowser:
 
 
     @classmethod
-    async def create(cls, headless: bool = False, storage_state_path: str = None) -> "StealthBrowser":
-        """工厂方法，支持传入 Cookie 路径"""
-        instance = cls(headless, storage_state_path)
+    async def create(cls, headless: bool = False) -> "StealthBrowser":
+        """工厂方法"""
+        instance = cls(headless)
         await instance.__aenter__()
         return instance
 
@@ -44,16 +41,9 @@ class StealthBrowser:
             args=args,
         )
 
-        # 2. 检查文件是否存在，避免报错
-        load_state = None
-        if self.storage_state_path and os.path.exists(self.storage_state_path):
-            load_state = self.storage_state_path
-            # print(f"正在加载 Cookie: {load_state}")
-
         # 3. 在创建 Context 时注入 storage_state
         # 这是最稳健的方式，同时恢复 Cookies 和 LocalStorage
         self.context = await self.browser.new_context(
-            storage_state=load_state,
             no_viewport=True,
             ignore_https_errors=True
         )
@@ -77,17 +67,17 @@ class StealthBrowser:
         从 JSON 文件加载 Cookie 并注入到当前上下文
         自动处理类型转换，消除 IDE 报错
         """
-        if not self.context:
-            raise RuntimeError("Context 未初始化")
-
-        path = Path(file_path)
-        if not path.exists():
-            print(f"[警告] Cookie 文件不存在: {path}")
-            return
-
-        context_options = {"storage_state": str(file_path)}
-        # 注入 Cookie
-        await self.context.add_cookies(**context_options)
+        # if not self.context:
+        #     raise RuntimeError("Context 未初始化")
+        #
+        # path = Path(file_path)
+        # if not path.exists():
+        #     print(f"[警告] Cookie 文件不存在: {path}")
+        #     return
+        #
+        # context_options = {"storage_state": str(file_path)}
+        # # 注入 Cookie
+        # await self.context.add_cookies(**context_options)
 
     async def storage_state(self, path: Path | str):
         """保存当前 Cookie 到文件"""

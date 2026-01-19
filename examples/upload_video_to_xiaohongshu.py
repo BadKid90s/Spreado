@@ -22,7 +22,7 @@ async def main():
 
     publish_time = datetime.now() + timedelta(hours=2)
 
-    uploader = XiaoHongShuUploader()
+    uploader = await XiaoHongShuUploader().start()
 
     await uploader.verify_cookie(auto_login=False)
 

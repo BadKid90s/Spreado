@@ -2,15 +2,34 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
-from playwright.async_api import Page
+from playwright.async_api import Page, Error
 
-from uploader.base_uploader import BaseUploader
-from utils.log import create_logger
-
-shipinhao_logger = create_logger("shipinhao", "logs/shipinhao.log")
+from publisher.uploader import BaseUploader
 
 
-class ShipinhaoUploader(BaseUploader):
+def _format_str_for_short_title(origin_title: str) -> str:
+    """
+    格式化短标题
+
+    Args:
+        origin_title: 原始标题
+
+    Returns:
+        格式化后的短标题
+    """
+    allowed_special_chars = "《》“”:+?%°"
+    filtered_chars = [char if char.isalnum() or char in allowed_special_chars else ' ' if char == ',' else '' for char in origin_title]
+    formatted_string = ''.join(filtered_chars)
+
+    if len(formatted_string) > 16:
+        formatted_string = formatted_string[:16]
+    elif len(formatted_string) < 6:
+        formatted_string += ' ' * (6 - len(formatted_string))
+
+    return formatted_string
+
+
+class ShiPinHaoUploader(BaseUploader):
     """
     视频号上传器
     """
@@ -63,9 +82,7 @@ class ShipinhaoUploader(BaseUploader):
             上传是否成功
         """
         try:
-            browser = await self._init_browser()
-            context = await self._init_context(browser, use_cookie=True)
-            page = await self._init_page(context)
+            page = await self.browser.new_page()
 
             await page.goto(self.upload_url)
             self.logger.info(f"[-] 正在打开上传页面...")
@@ -326,7 +343,7 @@ class ShipinhaoUploader(BaseUploader):
                         return True
                     else:
                         self.logger.info("[-] 正在上传视频中...")
-                except Exception:
+                except Error:
                     self.logger.info("[-] 正在上传视频中...")
                 
                 # 检查是否有上传错误
@@ -443,34 +460,13 @@ class ShipinhaoUploader(BaseUploader):
         try:
             short_title_element = page.get_by_text("短标题", exact=True).locator("..").locator("xpath=following-sibling::div").locator('span input[type="text"]')
             if await short_title_element.count():
-                short_title = self._format_str_for_short_title(title)
+                short_title = _format_str_for_short_title(title)
                 await short_title_element.fill(short_title)
                 self.logger.info(f"[+] 已添加短标题: {short_title}")
             return True
         except Exception as e:
             self.logger.error(f"[!] 添加短标题时出错: {e}")
             return False
-
-    def _format_str_for_short_title(self, origin_title: str) -> str:
-        """
-        格式化短标题
-
-        Args:
-            origin_title: 原始标题
-
-        Returns:
-            格式化后的短标题
-        """
-        allowed_special_chars = "《》“”:+?%°"
-        filtered_chars = [char if char.isalnum() or char in allowed_special_chars else ' ' if char == ',' else '' for char in origin_title]
-        formatted_string = ''.join(filtered_chars)
-
-        if len(formatted_string) > 16:
-            formatted_string = formatted_string[:16]
-        elif len(formatted_string) < 6:
-            formatted_string += ' ' * (6 - len(formatted_string))
-
-        return formatted_string
 
     async def _publish_video(self, page: Page, is_draft: bool = False) -> bool:
         """
@@ -499,7 +495,7 @@ class ShipinhaoUploader(BaseUploader):
                         await page.wait_for_url("**/post/list**", timeout=5000)
                         self.logger.info("[+] 视频草稿保存成功")
                         return True
-                    except Exception:
+                    except Error:
                         # 检查当前URL是否包含成功标志
                         current_url = page.url
                         if "post/list" in current_url or "draft" in current_url:
@@ -520,7 +516,7 @@ class ShipinhaoUploader(BaseUploader):
                         await page.wait_for_url(self.success_url_pattern, timeout=5000)
                         self.logger.info("[+] 视频发布成功")
                         return True
-                    except Exception:
+                    except Error:
                         # 检查当前URL是否包含成功标志
                         current_url = page.url
                         if self.success_url_pattern in current_url:
@@ -530,7 +526,7 @@ class ShipinhaoUploader(BaseUploader):
                         self.logger.debug(f"[-] 当前URL: {current_url}")
                         self.logger.debug("[-] 等待视频发布完成...")
                 
-            except Exception as e:
+            except Error as e:
                 self.logger.warning(f"[!] 发布视频时出错: {e}")
                 
                 # 检查当前URL是否包含成功标志

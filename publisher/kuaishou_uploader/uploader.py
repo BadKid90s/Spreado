@@ -8,13 +8,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
-from playwright.async_api import Page
+from playwright.async_api import Page, Error
 
-from utils.log import create_logger
-from uploader.base_uploader import BaseUploader
-
-kuaishou_logger = create_logger("kuaishou", "logs/kuaishou.log")
-
+from publisher.uploader import BaseUploader
 
 class KuaiShouUploader(BaseUploader):
     """
@@ -72,9 +68,7 @@ class KuaiShouUploader(BaseUploader):
             上传是否成功
         """
         try:
-            browser = await self._init_browser()
-            context = await self._init_context(browser, use_cookie=True)
-            page = await self._init_page(context)
+            page = await self.browser.new_page()
 
             await page.goto(self.upload_url)
             self.logger.info("[-] 正在打开上传页面...")
@@ -185,7 +179,7 @@ class KuaiShouUploader(BaseUploader):
                             if await element.count() > 0 and await element.first.is_visible():
                                 self.logger.info("视频上传完毕")
                                 return True
-                        except:
+                        except Error:
                             continue
                     
                     # 如果"上传中"消失但其他标记未出现，继续等待
@@ -207,6 +201,8 @@ class KuaiShouUploader(BaseUploader):
         if retry_count == max_retries:
             self.logger.warning("超过最大重试次数，视频上传可能未完成。")
             return False
+
+        return False
 
     async def _fill_video_info(self, page: Page, title: str, content: str, tags: List[str]) -> bool:
         """
@@ -450,7 +446,7 @@ class KuaiShouUploader(BaseUploader):
                     await page.wait_for_url(self.success_url_pattern, timeout=5000)
                     self.logger.info("[+] 视频发布成功，已跳转到管理页面")
                     return True
-                except Exception:
+                except Error:
                     # 如果没有跳转，检查当前页面URL是否包含成功标志
                     current_url = page.url
                     if self.success_url_pattern in current_url:
@@ -460,7 +456,7 @@ class KuaiShouUploader(BaseUploader):
                     self.logger.debug(f"[-] 当前URL: {current_url}")
                     self.logger.debug("[-] 等待视频发布完成...")
             
-            except Exception as e:
+            except Error as e:
                 self.logger.warning(f"[!] 发布视频时出错: {e}")
                 
             await page.wait_for_timeout(1000)

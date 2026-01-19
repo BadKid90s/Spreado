@@ -3,13 +3,10 @@ from pathlib import Path
 from typing import List, Optional
 import time
 
-from playwright.async_api import Page
+from playwright.async_api import Page, Error
 import asyncio
 
-from utils.log import create_logger
-from uploader.base_uploader import BaseUploader
-
-douyin_logger = create_logger("douyin", "logs/douyin.log")
+from publisher.uploader import BaseUploader
 
 
 class DouYinUploader(BaseUploader):
@@ -68,9 +65,7 @@ class DouYinUploader(BaseUploader):
             上传是否成功
         """
         try:
-            browser = await self._init_browser()
-            context = await self._init_context(browser, use_cookie=True)
-            page = await self._init_page(context)
+            page = await self.browser.new_page()
 
             await page.goto(self.upload_url)
             self.logger.info(f"[-] 正在打开上传页面...")
@@ -460,7 +455,7 @@ class DouYinUploader(BaseUploader):
                             if wait_after > 0:
                                 await page.wait_for_timeout(wait_after)
                             return True
-            except Exception:
+            except Error:
                 continue
         return False
 
@@ -489,7 +484,7 @@ class DouYinUploader(BaseUploader):
                             await input_elem.set_input_files(file_path)
                             self.logger.info(f"[+] 已上传{accept_type}文件")
                             return True
-            except Exception:
+            except Error:
                 continue
         return False
 
@@ -689,13 +684,13 @@ class DouYinUploader(BaseUploader):
                     await page.wait_for_url(self.success_url_pattern + "**", timeout=5000)
                     self.logger.info("[+] 视频发布成功，已跳转到管理页面")
                     return True
-                except Exception:
+                except Error:
                     # 如果没有跳转，检查是否有其他成功标志
                     self.logger.debug("[-] 未检测到页面跳转，检查是否有其他成功标志")
                     return True  # 抖音可能不跳转但发布成功
             else:
                 self.logger.error("[!] 未找到发布按钮")
                 return False
-        except Exception as e:
+        except Error as e:
             self.logger.error(f"[!] 发布视频时出错: {e}")
             return False

@@ -38,8 +38,11 @@ class BaseUploader(ABC):
         else:
             self.cookie_file_path = Path(cookie_file_path)
 
-        # 初始化浏览器
-        self.browser = StealthBrowser(headless=False)
+
+    async def start(self):
+        # 方式1：工厂方式（推荐用于长生命周期对象）
+        self.browser = await StealthBrowser.create(headless=True)
+        return self
 
     @property
     @abstractmethod
@@ -273,7 +276,7 @@ class BaseUploader(ABC):
         """
         self.logger.info(f"[+] 开始上传视频: {title}")
 
-        if not await self.ensure_login(auto_login=auto_login):
+        if not await self.verify_cookie(auto_login=auto_login):
             self.logger.error("[!] 登录失败，无法上传视频")
             return False
 

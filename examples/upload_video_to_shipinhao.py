@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from conf import BASE_DIR
-from publisher.shipinhao_uploader import ShipinhaoUploader
+from publisher.shipinhao_uploader import ShiPinHaoUploader
 from utils.files_times import get_title_and_hashtags
 
 
@@ -22,7 +22,7 @@ async def main():
 
     publish_time = datetime.now() + timedelta(hours=2)
 
-    uploader = ShipinhaoUploader()
+    uploader = ShiPinHaoUploader()
 
     await uploader.verify_cookie(auto_login=False)
 
