@@ -24,7 +24,7 @@ async def main():
 
     uploader = ShiPinHaoUploader()
 
-    await uploader.verify_cookie_flow(auto_login=False)
+    # await uploader.verify_cookie_flow(auto_login=False)
 
     result = await uploader.upload_video_flow(
         file_path=file_path,

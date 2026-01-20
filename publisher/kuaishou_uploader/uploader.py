@@ -23,7 +23,7 @@ class KuaiShouUploader(BaseUploader):
 
     @property
     def login_url(self) -> str:
-        return "https://cp.kuaishou.com"
+        return "https://passport.kuaishou.com/pc/account/login"
 
     @property
     def login_success_url(self) -> str:
@@ -180,29 +180,29 @@ class KuaiShouUploader(BaseUploader):
                         try:
                             element = page.locator(selector)
                             if await element.count() > 0 and await element.first.is_visible():
-                                self.logger.info("视频上传完毕")
+                                self.logger.info("[+] 视频上传完毕")
                                 return True
                         except Error:
                             continue
                     
                     # 如果"上传中"消失但其他标记未出现，继续等待
                     if retry_count % 10 == 0:
-                        self.logger.info("正在上传视频中...")
+                        self.logger.info("[+] 正在上传视频中...")
                 
                 # 动态调整等待时间，减少资源占用
                 if retry_count < 20:
-                    await page.wait_for_timeout(1000)  # 前20秒每秒检查一次
+                    await page.wait_for_timeout(500)  # 前20秒每秒检查一次
                 else:
-                    await page.wait_for_timeout(2000)  # 20秒后每2秒检查一次
+                    await page.wait_for_timeout(1000)  # 20秒后每2秒检查一次
                     
             except Exception as e:
-                self.logger.warning(f"检查上传状态时发生错误: {e}")
+                self.logger.warning(f"[-] 检查上传状态时发生错误: {e}")
                 await page.wait_for_timeout(1500)
             
             retry_count += 1
 
         if retry_count == max_retries:
-            self.logger.warning("超过最大重试次数，视频上传可能未完成。")
+            self.logger.warning("[-] 超过最大重试次数，视频上传可能未完成。")
             return False
 
         return False
@@ -252,7 +252,7 @@ class KuaiShouUploader(BaseUploader):
                     # 标签添加失败不影响整体上传
                     continue
 
-            self.logger.info(f"成功添加内容和hashtag: {added_tags_count}/{len(tags)}")
+            self.logger.info(f"[+] 成功添加内容和Tag: {added_tags_count}/{len(tags)}")
             return True
         except Exception as e:
             self.logger.error(f"[!] 填写视频信息时出错: {e}")
@@ -401,7 +401,7 @@ class KuaiShouUploader(BaseUploader):
         """
         try:
             publish_date_hour = publish_date.strftime("%Y-%m-%d %H:%M:%S")
-            self.logger.info(f"设置定时发布时间为: {publish_date_hour}")
+            self.logger.info(f"[+] 设置定时发布时间为: {publish_date_hour}")
             await page.locator("label:text('发布时间')").locator('xpath=following-sibling::div').locator('.ant-radio-input').nth(1).click()
             await page.wait_for_selector('div.ant-picker-input input[placeholder="选择日期时间"]', state='visible', timeout=5000)
             

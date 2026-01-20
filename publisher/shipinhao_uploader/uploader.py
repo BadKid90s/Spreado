@@ -44,7 +44,7 @@ class ShiPinHaoUploader(BaseUploader):
 
     @property
     def login_success_url(self) -> str:
-        return "https://channels.weixin.qq.com/platform"
+        return "https://channels.weixin.qq.com/platform/"
 
     @property
     def upload_url(self) -> str:
@@ -189,11 +189,7 @@ class ShiPinHaoUploader(BaseUploader):
         
         # 尝试多种定位方式查找文件输入框
         file_input_selectors = [
-            'input[type="file"][accept="video/mp4,video/x-m4v,video/*"][multiple="multiple"]',
-            'input[type="file"][accept="video/*"][multiple="multiple"]',
-            'input[type="file"][accept="video/mp4,video/x-m4v,video/*"]',
             'input[type="file"][accept="video/*"]',
-            'input[type="file"]'
         ]
         
         for selector in file_input_selectors:

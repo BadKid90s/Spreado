@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Literal, Callable, Awaitable, Any, Dict
 
-from playwright.async_api import Page, Locator
+from playwright.async_api import Page, Locator, Error
 
 from conf import BASE_DIR
 from publisher.browser import StealthBrowser
@@ -180,9 +180,8 @@ class BaseUploader(ABC):
 
         try:
 
-            async with await StealthBrowser.create(headless=False) as browser:
+            async with await StealthBrowser.create(headless=True) as browser:
                 await browser.load_cookies_from_file(self.cookie_file_path)
-                self.logger.info(f"[+] 检查页面是否包含登录页元素")
                 async with await browser.new_page() as page:
                     self.logger.info(f"[-] 正在打开上传页面...")
                     await page.goto(self.upload_url)
