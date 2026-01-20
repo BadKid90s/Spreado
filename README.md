@@ -1,4 +1,4 @@
-# 多平台视频上传工具
+# Spreado - 全平台内容发布工具
 
 一个强大的自动化工具，支持将视频同时发布到多个中国社交媒体平台，包括抖音、小红书、快手和腾讯视频号。
 
@@ -13,30 +13,41 @@
 
 ## 📋 系统要求
 
-- Python 3.10 或更高版本
+- Python 3.8 或更高版本
 - 操作系统：Windows, macOS, Linux
+- 浏览器：需要安装 Playwright Chromium（安装后自动下载）
 
 ## 📦 安装指南
 
-1. **克隆项目**
-   ```bash
-   git clone <repository-url>
-   cd spreado
-   ```
+### 方式一：通过 PyPI 安装（推荐）
 
-2. **创建虚拟环境（推荐）**
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # Linux/macOS
-   # 或
-   .venv\Scripts\activate     # Windows
-   ```
+```bash
+# 安装最新版本
+pip install spreado
 
-3. **安装依赖**
-   ```bash
-   pip install -r requirements.txt
-   playwright install chromium
-   ```
+# 安装 Playwright 浏览器（只需执行一次）
+playwright install chromium
+```
+
+### 方式二：从源码安装
+
+```bash
+# 克隆项目
+git clone https://github.com/yourname/spreado.git
+cd spreado
+
+# 创建虚拟环境（推荐）
+python -m venv .venv
+source .venv/bin/activate  # Linux/macOS
+# 或
+.venv\Scripts\activate     # Windows
+
+# 安装依赖
+pip install -r requirements.txt
+
+# 安装 Playwright 浏览器
+playwright install chromium
+```
 
 ## 🔧 快速开始
 
@@ -46,86 +57,141 @@
 
 ```bash
 # 登录抖音（会打开浏览器，手动完成登录）
-python cli/cli.py douyin login
+spreado login douyin
 
 # 登录小红书
-python cli/cli.py xiaohongshu login
+spreado login xiaohongshu
 
 # 登录快手
-python cli/cli.py kuaishou login
+spreado login kuaishou
 
 # 登录腾讯视频号
-python cli/cli.py shipinhao login
+spreado login shipinhao
 ```
 
 ### 2. 验证认证状态
 
 ```bash
-# 检查抖音认证状态
-python cli/cli.py douyin status
+# 检查所有平台认证状态
+spreado verify all
 
-# 验证Cookie有效性
-python cli/cli.py douyin verify
+# 检查单个平台
+spreado verify douyin
+
+# 并行验证（更快）
+spreado verify all --parallel
 ```
 
 ### 3. 上传视频
 
-**基本上传**
+**基本用法**
+
 ```bash
-python cli/cli.py douyin upload --file video.mp4 --title "我的视频" --content "视频描述" --tags "标签1,标签2"
+# 上传到抖音
+spreado upload douyin --video video.mp4 --title "我的视频标题"
+
+# 上传到小红书（需要封面）
+spreado upload xiaohongshu --video video.mp4 --cover cover.jpg --title "标题"
+
+# 上传到所有平台
+spreado upload all --video video.mp4 --title "我的视频"
 ```
 
-**高级功能**
+**高级用法**
+
 ```bash
-# 设置封面和定时发布
-python cli/cli.py douyin upload --file video.mp4 --title "我的视频" --thumbnail cover.png --publish-date "2024-12-31 18:00"
+# 带详细描述和标签
+spreado upload douyin \
+    --video video.mp4 \
+    --title "视频标题" \
+    --content "详细描述内容" \
+    --tags "标签1,标签2,标签3" \
+    --cover thumbnail.jpg
 
-# 从文本文件读取信息
-python cli/cli.py douyin upload --file video.mp4 --txt video.txt
+# 定时发布（2小时后）
+spreado upload douyin --video video.mp4 --title "定时发布" --schedule 2
 
-# 禁用自动登录
-python cli/cli.py douyin upload --file video.mp4 --title "我的视频" --no-auto-login
+# 指定发布时间
+spreado upload douyin --video video.mp4 --title "定时发布" --schedule "2024-12-31 18:00"
+
+# 并行上传到多个平台
+spreado upload all --video video.mp4 --title "我的视频" --parallel
 ```
 
-### 4. 支持的平台
+### 4. 获取帮助
 
-| 平台 | 命令 | 特殊功能 |
-|------|------|----------|
-| 抖音 | `douyin` | 地理位置、商品链接、第三方同步 |
-| 小红书 | `xiaohongshu` | 详细标签管理 |
-| 快手 | `kuaishou` | 定时发布 |
-| 腾讯视频号 | `shipinhao` | 原创声明、合集、短标题 |
+```bash
+# 查看主帮助
+spreado --help
+
+# 查看登录命令帮助
+spreado login --help
+
+# 查看上传命令帮助
+spreado upload --help
+```
 
 ## 📁 项目结构
 
 ```
 spreado/
-├── cli/                    # 命令行工具
-│   └── cli.py
-├── publisher/             # 各平台上传器
-│   ├── browser.py         # 浏览器封装与反检测
-│   ├── uploader.py        # 上传器基类
-│   ├── douyin_uploader/   # 抖音上传器
-│   ├── xiaohongshu_uploader/ # 小红书上传器
-│   ├── kuaishou_uploader/ # 快手上传器
-│   └── shipinhao_uploader/ # 腾讯视频号上传器
-├── utils/                 # 工具模块
-├── conf.py                # 配置文件
-└── requirements.txt       # 依赖列表
+├── spreado/                 # 主包
+│   ├── __init__.py          # 包初始化
+│   ├── __main__.py          # 入口点
+│   ├── __version__.py       # 版本信息
+│   ├── conf.py              # 配置文件
+│   ├── cli/                 # 命令行工具
+│   │   ├── __init__.py
+│   │   └── cli.py           # CLI 实现
+│   ├── publisher/           # 各平台上传器
+│   │   ├── __init__.py
+│   │   ├── browser.py       # 浏览器封装与反检测
+│   │   ├── uploader.py      # 上传器基类
+│   │   ├── douyin_uploader/   # 抖音上传器
+│   │   ├── xiaohongshu_uploader/ # 小红书上传器
+│   │   ├── kuaishou_uploader/   # 快手上传器
+│   │   └── shipinhao_uploader/  # 视频号上传器
+│   ├── utils/               # 工具模块
+│   │   ├── __init__.py
+│   │   ├── log.py           # 日志工具
+│   │   └── files_times.py   # 文件时间工具
+│   └── examples/            # 使用示例
+│       ├── get_douyin_cookie.py
+│       ├── get_xiaohongshu_cookie.py
+│       ├── get_kuaishou_cookie.py
+│       ├── get_shipinhao_cookie.py
+│       ├── upload_video_to_douyin.py
+│       ├── upload_video_to_xiaohongshu.py
+│       ├── upload_video_to_kuaishou.py
+│       └── upload_video_to_shipinhao.py
+├── pyproject.toml           # 项目配置
+├── setup.py                 # 传统配置（兼容）
+├── MANIFEST.in              # 打包清单
+├── requirements.txt         # 依赖列表
+└── README.md                # 说明文档
 ```
 
-## ⚙️ 高级用法
+## 🔧 配置文件
 
-### 文本文件格式
+### Cookie 存储位置
 
-创建一个 `.txt` 文件，按以下格式组织信息：
+登录后，Cookie 文件保存在以下位置：
+
 ```
-视频标题
-视频描述
-标签1,标签2,标签3
+cookies/
+├── douyin_uploader/account.json
+├── xiaohongshu_uploader/account.json
+├── kuaishou_uploader/account.json
+└── shipinhao_uploader/account.json
 ```
 
-### Python API 使用示例
+### 自定义 Cookie 路径
+
+```bash
+spreado upload douyin --video video.mp4 --title "标题" --cookies /path/to/cookies/
+```
+
+## 🐍 Python API 使用示例
 
 ```python
 import asyncio
@@ -134,71 +200,99 @@ from spreado.publisher.douyin_uploader import DouYinUploader
 
 
 async def upload_video():
-   # 初始化上传器
-   cookie_file_path = Path("spreado/cookies/douyin_uploader/account.json")
-   uploader = DouYinUploader(cookie_file_path=cookie_file_path)
+    # 初始化上传器
+    uploader = DouYinUploader(
+        cookie_file_path=Path("cookies/douyin_uploader/account.json")
+    )
 
-   # 上传视频
-   result = await uploader.upload_video_flow(
-      file_path="video.mp4",
-      title="我的视频",
-      content="视频描述",
-      tags=["标签1", "标签2"],
-      thumbnail_path="cover.png",
-      auto_login=True
-   )
+    # 上传视频
+    result = await uploader.upload_video_flow(
+        file_path=Path("video.mp4"),
+        title="我的视频",
+        content="视频描述",
+        tags=["标签1", "标签2"],
+        thumbnail_path=Path("cover.png"),
+    )
 
-   if result:
-      print("上传成功！")
-   else:
-      print("上传失败！")
+    if result:
+        print("上传成功！")
+    else:
+        print("上传失败！")
 
 
 # 运行上传
-asyncio.run(upload_video())
+if __name__ == "__main__":
+    asyncio.run(upload_video())
 ```
 
 ## 🛠️ 故障排除
 
 ### 常见问题
 
-1. **认证失败**
-   - 确保已成功登录平台
-   - 检查Cookie文件是否过期，重新运行登录命令
+1. **提示找不到浏览器？**
+   ```bash
+   # 安装 Playwright Chromium 浏览器
+   playwright install chromium
+   ```
 
-2. **上传失败**
-   - 检查网络连接
-   - 确认视频文件格式和大小符合平台要求
-   - 查看日志文件获取详细错误信息
+2. **Cookie 过期怎么办？**
+   ```bash
+   # 重新登录
+   spreado login douyin
+   ```
 
-3. **浏览器问题**
-   - 确保Playwright Chromium浏览器已正确安装
-   - 检查是否有浏览器进程未正确关闭
+3. **上传失败？**
+   ```bash
+   # 使用调试模式查看详细信息
+   spreado upload douyin --video video.mp4 --title "标题" --debug
+   ```
+
+4. **依赖问题？**
+   ```bash
+   # 重新安装依赖
+   pip install --upgrade spreado
+   ```
+
+5. **所有平台都需要登录吗？**
+   是的，首次使用每个平台都需要执行 `spreado login <平台>` 进行登录认证。登录成功后 Cookie 会保存在本地，后续上传无需重复登录。
+
+6. **如何查看详细日志？**
+   使用 `--debug` 参数可以查看详细的调试日志，帮助排查问题。
 
 ### 调试技巧
 
-- 使用 `--headless` 参数控制浏览器显示模式
-- 查看 `logs/` 目录下的详细日志
-- 在开发阶段可使用有头模式进行调试
+- 使用 `--debug` 参数查看详细日志和错误信息
+- 查看终端输出的错误信息
+- 确保已执行 `playwright install chromium` 安装浏览器
 
 ## 📦 打包为可执行文件
 
-您可以将项目打包为独立的可执行文件，方便在没有Python环境的机器上运行：
+如果您需要将项目打包为独立的可执行文件（无需 Python 环境）：
+
+### Windows
 
 ```bash
-# 安装PyInstaller
+# 安装 PyInstaller
 pip install pyinstaller
 
-# 安装Playwright浏览器
-playwright install chromium
+# 执行打包
+python build.py
 
-# 运行打包脚本
-./build_exe.sh
-
-# 打包后的可执行文件位于 dist/uploader
+# 打包后的文件位于 dist/ 目录
 ```
 
-详细打包说明请参见 [BUILD.md](BUILD.md)。
+### macOS / Linux
+
+```bash
+# 安装 PyInstaller
+pip install pyinstaller
+
+# 执行打包
+python build.py
+
+# 赋予执行权限
+chmod +x dist/spreado
+```
 
 ## 🤝 贡献
 
