@@ -2,9 +2,9 @@ import asyncio
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from conf import BASE_DIR
-from publisher.shipinhao_uploader import ShiPinHaoUploader
-from utils.files_times import get_title_and_hashtags
+from ..conf import BASE_DIR
+from ..publisher.shipinhao_uploader import ShiPinHaoUploader
+from ..utils.files_times import get_title_and_hashtags
 
 
 async def main():

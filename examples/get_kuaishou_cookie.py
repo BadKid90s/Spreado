@@ -1,6 +1,6 @@
 import asyncio
 
-from publisher.kuaishou_uploader import KuaiShouUploader
+from ..publisher.kuaishou_uploader import KuaiShouUploader
 
 
 async def main():

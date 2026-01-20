@@ -1,6 +1,6 @@
 import asyncio
 
-from publisher.douyin_uploader import DouYinUploader
+from ..publisher.douyin_uploader import DouYinUploader
 
 
 async def main():

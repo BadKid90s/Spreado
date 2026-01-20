@@ -2,9 +2,8 @@
 日志工具模块
 """
 import logging
-import os
-from pathlib import Path
-from conf import BASE_DIR, LOG_LEVEL, CONSOLE_LOG_LEVEL, LOGS_DIR
+
+from ..conf import LOG_LEVEL, LOGS_DIR
 
 
 def setup_logging():

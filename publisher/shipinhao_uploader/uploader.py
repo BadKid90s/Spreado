@@ -4,7 +4,7 @@ from typing import List, Optional
 
 from playwright.async_api import Page, Error
 
-from publisher.uploader import BaseUploader
+from ...publisher.uploader import BaseUploader
 
 
 def _format_str_for_short_title(origin_title: str) -> str:

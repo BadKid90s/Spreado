@@ -7,7 +7,7 @@ import time
 from playwright.async_api import Page, Error
 import asyncio
 
-from publisher.uploader import BaseUploader
+from ...publisher.uploader import BaseUploader
 
 
 class XiaoHongShuUploader(BaseUploader):

@@ -2,7 +2,7 @@ from datetime import timedelta
 from datetime import datetime
 from pathlib import Path
 
-from conf import BASE_DIR
+from ..conf import BASE_DIR
 
 
 def get_absolute_path(relative_path: str, base_dir: str = None) -> str:

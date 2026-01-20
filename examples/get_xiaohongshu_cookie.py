@@ -1,6 +1,6 @@
 import asyncio
 
-from publisher.xiaohongshu_uploader import XiaoHongShuUploader
+from ..publisher.xiaohongshu_uploader import XiaoHongShuUploader
 
 
 async def main():

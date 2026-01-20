@@ -6,9 +6,9 @@ from typing import Optional, List, Literal, Callable, Awaitable, Any, Dict
 
 from playwright.async_api import Page, Locator, Error
 
-from conf import BASE_DIR
-from publisher.browser import StealthBrowser
-from utils.log import get_uploader_logger
+from ..conf import BASE_DIR
+from ..publisher.browser import StealthBrowser
+from ..utils.log import get_uploader_logger
 
 
 class BaseUploader(ABC):

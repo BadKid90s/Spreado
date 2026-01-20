@@ -1,16 +1,10 @@
-import os
-import sys
-
-# 设置PYTHONPATH为项目根目录
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
-
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
 from playwright.async_api import Page, Error
 
-from publisher.uploader import BaseUploader
+from ...publisher.uploader import BaseUploader
 
 class KuaiShouUploader(BaseUploader):
     """

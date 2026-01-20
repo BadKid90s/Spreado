@@ -3,9 +3,9 @@ from pathlib import Path
 
 import asyncio
 
-from conf import BASE_DIR
-from publisher.kuaishou_uploader import KuaiShouUploader
-from utils.files_times import get_title_and_hashtags
+from ..conf import BASE_DIR
+from ..publisher.kuaishou_uploader import KuaiShouUploader
+from ..utils.files_times import get_title_and_hashtags
 
 
 async def main():

@@ -1,6 +1,6 @@
 import asyncio
 
-from publisher.shipinhao_uploader import ShiPinHaoUploader
+from ..publisher.shipinhao_uploader import ShiPinHaoUploader
 
 
 async def main():
