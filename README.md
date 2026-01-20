@@ -130,27 +130,29 @@ spreado/
 ```python
 import asyncio
 from pathlib import Path
-from publisher.douyin_uploader import DouYinUploader
+from spreado.publisher.douyin_uploader import DouYinUploader
+
 
 async def upload_video():
-    # 初始化上传器
-    cookie_file_path = Path("cookies/douyin_uploader/account.json")
-    uploader = DouYinUploader(cookie_file_path=cookie_file_path)
+   # 初始化上传器
+   cookie_file_path = Path("spreado/cookies/douyin_uploader/account.json")
+   uploader = DouYinUploader(cookie_file_path=cookie_file_path)
 
-    # 上传视频
-    result = await uploader.upload_video_flow(
-        file_path="video.mp4",
-        title="我的视频",
-        content="视频描述",
-        tags=["标签1", "标签2"],
-        thumbnail_path="cover.png",
-        auto_login=True
-    )
+   # 上传视频
+   result = await uploader.upload_video_flow(
+      file_path="video.mp4",
+      title="我的视频",
+      content="视频描述",
+      tags=["标签1", "标签2"],
+      thumbnail_path="cover.png",
+      auto_login=True
+   )
 
-    if result:
-        print("上传成功！")
-    else:
-        print("上传失败！")
+   if result:
+      print("上传成功！")
+   else:
+      print("上传失败！")
+
 
 # 运行上传
 asyncio.run(upload_video())

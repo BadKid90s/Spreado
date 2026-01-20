@@ -113,7 +113,7 @@ python cli/cli.py douyin upload --file video.mp4 --title "我的视频" --no-aut
 ```python
 import asyncio
 from pathlib import Path
-from publisher.douyin_uploader import DouYinUploader
+from spreado.publisher.do`uyin_uploader import DouYinUploader
 
 
 async def main():
