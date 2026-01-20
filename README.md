@@ -131,46 +131,6 @@ spreado login --help
 spreado upload --help
 ```
 
-## 📁 项目结构
-
-```
-spreado/
-├── spreado/                 # 主包
-│   ├── __init__.py          # 包初始化
-│   ├── __main__.py          # 入口点
-│   ├── __version__.py       # 版本信息
-│   ├── conf.py              # 配置文件
-│   ├── cli/                 # 命令行工具
-│   │   ├── __init__.py
-│   │   └── cli.py           # CLI 实现
-│   ├── publisher/           # 各平台上传器
-│   │   ├── __init__.py
-│   │   ├── browser.py       # 浏览器封装与反检测
-│   │   ├── uploader.py      # 上传器基类
-│   │   ├── douyin_uploader/   # 抖音上传器
-│   │   ├── xiaohongshu_uploader/ # 小红书上传器
-│   │   ├── kuaishou_uploader/   # 快手上传器
-│   │   └── shipinhao_uploader/  # 视频号上传器
-│   ├── utils/               # 工具模块
-│   │   ├── __init__.py
-│   │   ├── log.py           # 日志工具
-│   │   └── files_times.py   # 文件时间工具
-│   └── examples/            # 使用示例
-│       ├── get_douyin_cookie.py
-│       ├── get_xiaohongshu_cookie.py
-│       ├── get_kuaishou_cookie.py
-│       ├── get_shipinhao_cookie.py
-│       ├── upload_video_to_douyin.py
-│       ├── upload_video_to_xiaohongshu.py
-│       ├── upload_video_to_kuaishou.py
-│       └── upload_video_to_shipinhao.py
-├── pyproject.toml           # 项目配置
-├── setup.py                 # 传统配置（兼容）
-├── MANIFEST.in              # 打包清单
-├── requirements.txt         # 依赖列表
-└── README.md                # 说明文档
-```
-
 ## 🔧 配置文件
 
 ### Cookie 存储位置
