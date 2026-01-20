@@ -87,7 +87,7 @@ async def cmd_login(args):
     """登录命令"""
     logger = get_logger("LOGIN")
 
-    platforms = list(UPLOADERS.keys()) if args.platform == 'all' else [args.platform]
+    platforms = list(UPLOADERS.keys()) 
 
     success_count = 0
     fail_count = 0
@@ -198,7 +198,6 @@ async def upload_single_platform(
             tags=tags,
             publish_date=publish_date,
             thumbnail_path=thumbnail_path,
-            auto_login=args.auto_login,
         )
 
         if result:
@@ -453,11 +452,6 @@ def create_parser():
         '--cookies',
         type=str,
         help='Cookie 文件路径'
-    )
-    upload_parser.add_argument(
-        '--auto-login',
-        action='store_true',
-        help='Cookie 失效时自动登录'
     )
     upload_parser.add_argument(
         '--parallel', '-p',
