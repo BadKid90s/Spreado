@@ -1,6 +1,11 @@
 .idea
-spreado/.venv
-../logs
 .vscode
+.venv
+**/logs
+**/cookies
 **/__pycache__
-××/cookies/
+
+build
+cookies
+dist
+build.spec
