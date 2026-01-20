@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "spreado"
+version = "1.0.0"
+description = "全平台内容发布工具 - 支持抖音、小红书、快手、视频号等平台"
+readme = "README.md"
+license = "MIT"
+authors = [
+    {name = "wangruiyu", email = "wry10150@163.com"}
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+keywords = ["video", "upload", "automation", "social-media", "douyin", "xiaohongshu", "kuaishou"]
+requires-python = ">=3.8"
+dependencies = [
+    "playwright>=1.40.0",
+    "playwright-stealth>=2.0.1",
+    "loguru>=0.7.0",
+    "pytz>=2024.1",
+    "typing-extensions>=4.9.0",
+    "pyee>=11.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+]
+
+[project.scripts]
+spreado = "spreado.cli.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/yourname/spreado"
+Repository = "https://github.com/yourname/spreado"
+Issues = "https://github.com/yourname/spreado/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["spreado*"]
