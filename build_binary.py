@@ -18,6 +18,7 @@ Spreado 二进制分发构建脚本
 
 import os
 import sys
+import tarfile
 import shutil
 import subprocess
 import platform
@@ -59,6 +60,29 @@ def get_platform_info():
             return "linux", "x64", ""
 
 
+PLATFORM_MAP = {
+    ("windows", "x64"): ("windows", "x64", ".exe"),
+    ("darwin", "x64"): ("macos", "x64", ""),
+    ("darwin", "arm64"): ("macos", "arm64", ""),
+    ("linux", "x64"): ("linux", "x64", ""),
+    ("linux", "aarch64"): ("linux", "arm64", ""),
+}
+
+
+def get_current_build_target():
+    """获取当前平台作为构建目标"""
+    system = platform.system().lower()
+    machine = platform.machine().lower()
+
+    key = (system, machine)
+    if key in PLATFORM_MAP:
+        return PLATFORM_MAP[key]
+    elif machine == "aarch64":
+        return ("linux", "arm64", "")
+    else:
+        return ("linux", "x64", "")
+
+
 def clean_build_dirs():
     """清理构建目录"""
     dirs_to_clean = ["build", "dist", "__pycache__"]
@@ -74,18 +98,24 @@ def clean_build_dirs():
 
 def build_specific_platform(platform_name, arch, output_dir=None, onefile=True):
     """为特定平台构建二进制文件"""
-    system, machine, exe_ext = get_platform_info()
+    current_system, current_arch, current_ext = get_platform_info()
+
+    if (platform_name, arch) != (current_system, current_arch):
+        print(f"\n⚠ 跳过跨平台构建: 不能在 {current_system}-{current_arch} 上构建 {platform_name}-{arch}")
+        print(f"   请在目标平台上运行此脚本")
+        return None
 
     if output_dir is None:
-        output_dir = Path(f"dist/{APP_NAME}-{get_version()}-{platform_name}-{arch}")
+        output_dir = Path("dist")
+
+    pkg_name = f"{APP_NAME}-{get_version()}-{platform_name}-{arch}"
+    temp_dir = Path(f"build/{pkg_name}")
 
     print(f"\n{'='*60}")
     print(f"  正在构建: {platform_name} ({arch})")
     print(f"{'='*60}")
 
     clean_build_dirs()
-
-    output_dir.mkdir(parents=True, exist_ok=True)
 
     build_cmd = [
         sys.executable, "build.py",
@@ -103,41 +133,63 @@ def build_specific_platform(platform_name, arch, output_dir=None, onefile=True):
         print(f"\n✗ 构建失败: {platform_name} ({arch})")
         return False
 
+    temp_dir.mkdir(parents=True, exist_ok=True)
+
     dist_path = Path("dist")
+    exe_name = f"{APP_NAME}{current_ext}"
+
+    copied = False
     for item in dist_path.iterdir():
-        if item.is_file() and (item.suffix == ".exe" or (
-            platform.system() != "Windows" and not item.name.endswith((".zip", ".tar.gz"))
-        )):
-            if platform.system() == "Windows":
-                new_name = f"{APP_NAME}{exe_ext}"
-            else:
-                new_name = APP_NAME
-            dest_path = output_dir / new_name
+        if item.is_file() and (item.name == exe_name or item.suffix == ".exe"):
+            dest_path = temp_dir / exe_name
             shutil.copy2(item, dest_path)
             print(f"  复制: {item.name} -> {dest_path.name}")
+            os.chmod(dest_path, 0o755)
+            copied = True
             break
 
-    readme_path = output_dir / "README.txt"
+    if not copied:
+        for item in dist_path.iterdir():
+            if item.is_file() and item.name.startswith(APP_NAME) and not item.suffix:
+                dest_path = temp_dir / exe_name
+                shutil.copy2(item, dest_path)
+                print(f"  复制: {item.name} -> {dest_path.name}")
+                os.chmod(dest_path, 0o755)
+                copied = True
+                break
+
+    if not copied:
+        print(f"\n✗ 错误: 找不到可执行文件")
+        return False
+
+    readme_path = temp_dir / "README.txt"
     if Path("dist/README.txt").exists():
         shutil.copy2("dist/README.txt", readme_path)
         print(f"  复制: README.txt")
 
     if platform.system() == "Windows":
-        install_script = output_dir / "install_browser.bat"
+        install_script = temp_dir / "install_browser.bat"
         if Path("dist/install_browser.bat").exists():
             shutil.copy2("dist/install_browser.bat", install_script)
             print(f"  复制: install_browser.bat")
     else:
-        install_script = output_dir / "install_browser.sh"
+        install_script = temp_dir / "install_browser.sh"
         if Path("dist/install_browser.sh").exists():
             shutil.copy2("dist/install_browser.sh", install_script)
             os.chmod(install_script, 0o755)
             print(f"  复制: install_browser.sh")
 
-    print(f"\n✓ {platform_name} ({arch}) 构建完成")
-    print(f"  输出目录: {output_dir}")
+    archive_path = output_dir / f"{pkg_name}.tar.gz"
+    with tarfile.open(archive_path, "w:gz") as tar:
+        for item in temp_dir.iterdir():
+            tar.add(item, arcname=item.name)
+            print(f"  打包: {item.name}")
 
-    return True
+    shutil.rmtree(temp_dir)
+    print(f"\n✓ {platform_name} ({arch}) 构建完成")
+    print(f"  输出文件: {archive_path}")
+
+    return archive_path
 
 
 def build_current_platform():
@@ -164,17 +216,29 @@ def build_all_platforms():
             results.append((platform_name, arch, result))
         except Exception as e:
             print(f"\n✗ 构建失败 {platform_name} ({arch}): {e}")
-            results.append((platform_name, arch, False))
+            results.append((platform_name, arch, None))
 
     print(f"\n{'='*60}")
     print(f"  构建汇总")
     print(f"{'='*60}")
 
-    for platform_name, arch, success in results:
-        status = "✓ 成功" if success else "✗ 失败"
-        print(f"  {platform_name:10} ({arch:6}): {status}")
+    skipped = sum(1 for r in results if r[2] is None)
+    succeeded = sum(1 for r in results if r[2] is not None and r[2] is not False)
+    failed = sum(1 for r in results if r[2] is False)
 
-    return all(r[2] for r in results)
+    for platform_name, arch, archive_path in results:
+        if archive_path is None:
+            print(f"  {platform_name:10} ({arch:6}): ⊘ 跳过（跨平台限制）")
+        elif archive_path is False:
+            print(f"  {platform_name:10} ({arch:6}): ✗ 失败")
+        else:
+            print(f"  {platform_name:10} ({arch:6}): ✓ {archive_path.name}")
+
+    print(f"\n  总计: {succeeded} 成功, {failed} 失败, {skipped} 跳过")
+    print(f"\n  提示: 在 {platform.system()}-{platform.machine()} 上只能构建当前平台的二进制文件")
+    print(f"        如需构建其他平台，请在对应操作系统上运行此脚本")
+
+    return succeeded > 0 and failed == 0
 
 
 def upload_to_pypi(test=True):
