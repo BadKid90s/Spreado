@@ -209,13 +209,13 @@ async def upload_action(
     if publish_datetime:
         logger.info(f"    定时发布: {publish_datetime}")
 
-    # 直接调用upload_video方法，避免重复的Cookie验证（特别是抖音平台）
+    # 直接调用upload_video_flow方法，避免重复的Cookie验证（特别是抖音平台）
     # 但仍然需要确保Cookie有效
-    if not uploader.account_file.exists():
+    if not uploader.cookie_file_path.exists():
         logger.error("[!] 账户文件不存在")
         if auto_login:
             logger.info("[+] 尝试自动登录...")
-            from uploader.auth_manager import AuthManager
+            from publisher.auth_manager import AuthManager
             auth_manager = AuthManager(uploader)
             login_success = await auth_manager.perform_login(headless=False)
             if not login_success:

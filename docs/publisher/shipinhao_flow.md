@@ -1,14 +1,14 @@
-# 视频号视频发布器工作流程
+# 视频号视频上传器工作流程
 
 ## 1. 项目概述
 
-视频号视频发布器是一个自动化工具，用于将视频上传到微信视频号平台。它提供了完整的视频发布流程，包括视频上传、信息填写、封面设置、定时发布、原创声明和最终发布等功能。
+视频号视频上传器是一个自动化工具，用于将视频上传到微信视频号平台。它提供了完整的视频上传流程，包括视频上传、信息填写、封面设置、定时发布、原创声明和最终发布等功能。
 
 ## 2. 核心类与结构
 
 ### 2.1 ShipinhaoUploader 类
 
-`ShipinhaoUploader` 是发布器的核心类，继承自 `BaseUploader`，实现了视频号平台的视频发布功能。
+`ShipinhaoUploader` 是上传器的核心类，继承自 `BaseUploader`，实现了视频号平台的视频上传功能。
 
 ### 2.2 主要属性
 
@@ -16,39 +16,33 @@
 |-------|------|------|
 | platform_name | str | 平台名称（"shipinhao"） |
 | login_url | str | 登录页面URL |
+| login_success_url | str | 登录成功后的跳转URL |
 | upload_url | str | 视频上传页面URL |
-| success_url_pattern | str | 发布成功页面URL模式 |
-| login_selectors | List[str] | 登录相关元素选择器列表 |
+| success_url_pattern | str | 上传成功页面URL模式 |
+| _login_selectors | List[str] | 登录相关元素选择器列表 |
 
 ## 3. 完整工作流程
 
-### 3.1 主流程 (`upload_video`)
+### 3.1 主流程 (`upload_video_flow`)
 
-`upload_video` 是发布器的主要入口方法，协调整个视频发布流程：
+`upload_video_flow` 是上传器的主要入口方法，协调整个视频上传流程：
 
 ```
-1. 初始化浏览器和上下文
-2. 打开上传页面
-3. 上传视频文件
-4. 等待视频上传完成
-5. 填写视频信息（标题、描述、标签）
-6. 设置视频封面
-7. 添加到合集
-8. 设置原创声明
-9. 设置定时发布时间（可选）
-10. 添加短标题
-11. 发布视频或保存草稿
-12. 验证发布结果
+1. 调用 verify_cookie_flow() 确保已登录
+2. 初始化浏览器和上下文（无头模式）
+3. 加载Cookie到浏览器上下文
+4. 创建新页面并跳转到上传页面
+5. 调用 _upload_video() 执行平台特定上传
+6. 上传完成后清理资源
+7. 返回上传结果
 ```
 
 ### 3.2 详细步骤分解
 
-#### 3.2.1 初始化与认证
+#### 3.2.1 认证验证
 
-- **浏览器初始化**：创建Playwright浏览器实例
-- **上下文初始化**：配置浏览器上下文，加载认证信息
-- **页面初始化**：创建并配置页面实例
-- **认证验证**：检查并确保用户已认证
+- **调用 verify_cookie_flow()**：确保已登录，如果未登录则根据auto_login参数决定是否执行登录
+- **Cookie加载**：将保存的Cookie加载到浏览器上下文
 
 #### 3.2.2 打开上传页面
 
@@ -178,41 +172,36 @@
 ## 6. 使用示例
 
 ```python
-from datetime import datetime, timedelta
-from uploader.shipinhao_uploader.uploader import ShipinhaoUploader
-from uploader.auth_manager import AuthManager
-
-# 创建发布器实例
-uploader = ShipinhaoUploader(headless=True)
-auth_manager = AuthManager(uploader)
-
-async def upload_video():
-    # 验证认证状态
-    if await auth_manager.ensure_authenticated(auto_login=False):
-        # 设置定时发布时间（2小时后）
-        publish_time = datetime.now() + timedelta(hours=2)
-        
-        # 发布视频
-        result = await uploader.upload_video(
-            file_path="/path/to/video.mp4",
-            title="视频标题",
-            content="视频描述内容",
-            tags=["#音乐", "#AI音乐"],
-            publish_date=publish_time,
-            thumbnail_path="/path/to/thumbnail.png",
-            category="音乐"
-        )
-        
-        if result:
-            print("视频发布成功！")
-        else:
-            print("视频发布失败！")
-    else:
-        print("认证失败，请先获取认证信息")
-
-# 执行上传
 import asyncio
-asyncio.run(upload_video())
+from pathlib import Path
+from publisher.shipinhao_uploader import ShipinhaoUploader
+
+async def main():
+    # 初始化上传器
+    cookie_file_path = Path("cookies/shipinhao_uploader/account.json")
+    uploader = ShipinhaoUploader(cookie_file_path=cookie_file_path)
+
+    # 确保已登录
+    if not await uploader.verify_cookie_flow(auto_login=True):
+        print("登录失败")
+        return
+
+    # 上传视频
+    result = await uploader.upload_video_flow(
+        file_path="video.mp4",
+        title="我的视频",
+        content="视频描述",
+        tags=["标签1", "标签2"],
+        thumbnail_path="cover.png",
+        auto_login=True
+    )
+
+    if result:
+        print("上传成功")
+    else:
+        print("上传失败")
+
+asyncio.run(main())
 ```
 
 ## 7. 常见问题与解决方案
@@ -292,7 +281,7 @@ asyncio.run(upload_video())
 - 合集：支持添加到已有合集
 - 草稿：支持保存为草稿
 
-## 9. 与抖音发布流程对比
+## 9. 与抖音上传流程对比
 
 | 流程步骤 | 抖音 | 视频号 |
 |---------|------|--------|
@@ -307,4 +296,4 @@ asyncio.run(upload_video())
 
 ## 10. 总结
 
-视频号视频发布器提供了完整的自动化发布流程，通过合理的设计和可靠的实现，确保了视频能够高效、稳定地发布到视频号平台。它具有良好的扩展性和可维护性，可以根据平台的变化进行相应的调整和优化。
+视频号视频上传器提供了完整的自动化上传流程，通过合理的设计和可靠的实现，确保了视频能够高效、稳定地上传到视频号平台。它具有良好的扩展性和可维护性，可以根据平台的变化进行相应的调整和优化。
