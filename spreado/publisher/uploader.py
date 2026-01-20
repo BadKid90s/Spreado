@@ -108,7 +108,7 @@ class BaseUploader(ABC):
                 self.logger.info(f"[+] 已打开登录页面，请在浏览器中完成登录操作")
                 # 1. 直接等待目标 URL 出现
                 await page.wait_for_url(
-                    url= self.login_success_url,
+                    url=self.login_success_url,
                     timeout=60000,
                     wait_until="commit"
                 )
@@ -146,13 +146,13 @@ class BaseUploader(ABC):
             return await self.login_flow()
 
         return False
- 
+
     async def upload_video_flow(
             self,
             file_path: str | Path,
-            title: str,
-            content: str,
-            tags: List[str],
+            title: str = "",
+            content: str = "",
+            tags: List[str] = None,
             publish_date: Optional[datetime] = None,
             thumbnail_path: Optional[str | Path] = None,
             auto_login: bool = False,
@@ -204,7 +204,6 @@ class BaseUploader(ABC):
         except Exception as e:
             self.logger.error(f"[!] 上传视频时出错: {e}")
             return False
-
 
     @property
     @abstractmethod
@@ -291,9 +290,9 @@ class BaseUploader(ABC):
             self,
             page: Page,
             file_path: str | Path,
-            title: str,
-            content: str,
-            tags: List[str],
+            title: str = "",
+            content: str = "",
+            tags: List[str] = None,
             publish_date: Optional[datetime] = None,
             thumbnail_path: Optional[str | Path] = None,
     ) -> bool:
@@ -313,7 +312,6 @@ class BaseUploader(ABC):
             上传是否成功
         """
         pass
-
 
     async def _find_first_element(
             self,

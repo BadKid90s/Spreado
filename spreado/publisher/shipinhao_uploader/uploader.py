@@ -67,9 +67,9 @@ class ShiPinHaoUploader(BaseUploader):
         self,
         page: Page,
         file_path: str | Path,
-        title: str,
-        content: str,
-        tags: List[str],
+        title: str = "",
+        content: str = "",
+        tags: List[str] = None,
         publish_date: Optional[datetime] = None,
         thumbnail_path: Optional[str | Path] = None
     ) -> bool:
@@ -211,7 +211,7 @@ class ShiPinHaoUploader(BaseUploader):
         self.logger.error(f"[!] 选择器查找失败，无法上传视频文件")
         return False
 
-    async def _fill_video_info(self, page: Page, title: str, content: str, tags: List[str]) -> bool:
+    async def _fill_video_info(self, page: Page, title: str = "", content: str = "", tags: List[str] = None) -> bool:
         """
         填写视频信息
 
@@ -232,12 +232,13 @@ class ShiPinHaoUploader(BaseUploader):
             await page.keyboard.type(content)
             await page.keyboard.press("Enter")
 
-            for tag in tags:
-                if not tag.startswith("#"):
-                    await page.keyboard.type("#" + tag)
-                else:
-                    await page.keyboard.type(tag)
-                await page.keyboard.press("Space")
+            if tags:
+                for tag in tags:
+                    if not tag.startswith("#"):
+                        await page.keyboard.type("#" + tag)
+                    else:
+                        await page.keyboard.type(tag)
+                    await page.keyboard.press("Space")
 
             self.logger.info(f"[+] 成功添加hashtag: {len(tags)}")
             return True

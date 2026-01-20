@@ -46,9 +46,9 @@ class DouYinUploader(BaseUploader):
         self,
         page: Page,
         file_path: str | Path,
-        title: str,
-        content: str,
-        tags: List[str],
+        title: str = "",
+        content: str = "",
+        tags: List[str] = None,
         publish_date: Optional[datetime] = None,
         thumbnail_path: Optional[str | Path] = None,
     ) -> bool:
@@ -217,7 +217,7 @@ class DouYinUploader(BaseUploader):
         self.logger.warning("[!] 超过最大等待时间，视频上传可能未完成")
         return False
 
-    async def _fill_video_info(self, page: Page, title: str, content: str, tags: List[str]) -> bool:
+    async def _fill_video_info(self, page: Page, title: str = "", content: str = "", tags: List[str] = None) -> bool:
         """
         填写视频信息
 
@@ -258,52 +258,53 @@ class DouYinUploader(BaseUploader):
 
             # 添加标签
             added_tags = 0
-            for i, tag in enumerate(tags):
-                clean_tag = tag.lstrip("#")
-                full_tag = f"#{clean_tag}"
-                self.logger.debug(f"[DEBUG] 添加第 {i+1} 个标签: {full_tag}")
+            if tags:
+                for i, tag in enumerate(tags):
+                    clean_tag = tag.lstrip("#")
+                    full_tag = f"#{clean_tag}"
+                    self.logger.debug(f"[DEBUG] 添加第 {i+1} 个标签: {full_tag}")
 
-                # 尝试多种方式添加标签
-                try:
-                    # 确保光标在编辑器末尾
-                    await desc_element.focus()
-                    await page.keyboard.press("End")
-                    await page.wait_for_timeout(800)  # 增加延迟，确保光标移动到位
-                    
-                    # 添加一个空格作为分隔符
-                    await desc_element.type(" ")
-                    await page.wait_for_timeout(800)  # 增加延迟，确保空格输入完成
-
-                    # 按照小红书的顺序添加标签：输入#号→输入文字→按回车
-                    await desc_element.type("#")
-                    await page.wait_for_timeout(500)  # 增加延迟，确保#号输入完成
-                    
-                    await desc_element.type(clean_tag)
-                    await page.wait_for_timeout(1000)  # 增加延迟，确保标签文字输入完成
-                    
-                    await page.keyboard.press("Enter")
-                    
-                    added_tags += 1
-                    self.logger.debug(f"[DEBUG] 成功添加标签: {full_tag}")
-
-                except Exception as e:
-                    self.logger.warning(f"[-] 添加标签 {full_tag} 时出现问题: {e}，尝试直接输入")
-                    # 如果上述方式失败，直接追加到内容后面
+                    # 尝试多种方式添加标签
                     try:
+                        # 确保光标在编辑器末尾
                         await desc_element.focus()
                         await page.keyboard.press("End")
-                        await desc_element.type(f" #{clean_tag} ")
-                        await page.wait_for_timeout(500)
-                        added_tags += 1
-                        self.logger.debug(f"[DEBUG] 直接追加标签成功: {full_tag}")
-                    except Exception as e2:
-                        self.logger.error(f"[!] 直接追加标签 {full_tag} 也失败了: {e2}")
-                        # 标签添加失败不影响整体上传
+                        await page.wait_for_timeout(800)  # 增加延迟，确保光标移动到位
 
-                # 添加标签后跳转到最后
-                await desc_element.focus()
-                await page.keyboard.press("End")
-                await page.wait_for_timeout(800)  # 增加延迟，确保光标移动到末尾
+                        # 添加一个空格作为分隔符
+                        await desc_element.type(" ")
+                        await page.wait_for_timeout(800)  # 增加延迟，确保空格输入完成
+
+                        # 按照小红书的顺序添加标签：输入#号→输入文字→按回车
+                        await desc_element.type("#")
+                        await page.wait_for_timeout(500)  # 增加延迟，确保#号输入完成
+
+                        await desc_element.type(clean_tag)
+                        await page.wait_for_timeout(1000)  # 增加延迟，确保标签文字输入完成
+
+                        await page.keyboard.press("Enter")
+
+                        added_tags += 1
+                        self.logger.debug(f"[DEBUG] 成功添加标签: {full_tag}")
+
+                    except Exception as e:
+                        self.logger.warning(f"[-] 添加标签 {full_tag} 时出现问题: {e}，尝试直接输入")
+                        # 如果上述方式失败，直接追加到内容后面
+                        try:
+                            await desc_element.focus()
+                            await page.keyboard.press("End")
+                            await desc_element.type(f" #{clean_tag} ")
+                            await page.wait_for_timeout(500)
+                            added_tags += 1
+                            self.logger.debug(f"[DEBUG] 直接追加标签成功: {full_tag}")
+                        except Exception as e2:
+                            self.logger.error(f"[!] 直接追加标签 {full_tag} 也失败了: {e2}")
+                            # 标签添加失败不影响整体上传
+
+                    # 添加标签后跳转到最后
+                    await desc_element.focus()
+                    await page.keyboard.press("End")
+                    await page.wait_for_timeout(800)  # 增加延迟，确保光标移动到末尾
 
             self.logger.info(f"[+] 标题和{added_tags}个标签已添加 (共{len(tags)}个标签)")
             return True

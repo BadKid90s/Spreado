@@ -44,9 +44,9 @@ class KuaiShouUploader(BaseUploader):
         self,
         page: Page,
         file_path: str | Path,
-        title: str,
-        content: str,
-        tags: List[str],
+        title: str = "",
+        content: str = "",
+        tags: List[str] = None,
         publish_date: Optional[datetime] = None, 
         thumbnail_path: Optional[str | Path] = None,
     ) -> bool:
@@ -201,7 +201,7 @@ class KuaiShouUploader(BaseUploader):
 
         return False
 
-    async def _fill_video_info(self, page: Page, title: str, content: str, tags: List[str]) -> bool:
+    async def _fill_video_info(self, page: Page, title: str = "", content: str = "", tags: List[str] = None) -> bool:
         """
         填写视频信息
 
@@ -221,30 +221,31 @@ class KuaiShouUploader(BaseUploader):
             await page.keyboard.type(text_content)
 
             added_tags_count = 0
-            for tag in tags:
-                topic_name = tag.lstrip("#")
+            if tags:
+                for tag in tags:
+                    topic_name = tag.lstrip("#")
 
-                try:
-                    # 优化shift+3输入#号
-                    await page.keyboard.down("Shift")  # 按下 Shift
-                    await page.keyboard.press("Digit3")  # 按下主键盘区的 3
-                    await page.keyboard.up("Shift")  # 松开 Shift
-                    
-                    # 减少等待时间
-                    await page.wait_for_timeout(100)
-                    
-                    # 减少输入延迟
-                    await page.keyboard.type(topic_name, delay=50)
-                    
-                    # 减少等待时间
-                    await page.wait_for_timeout(500)
-                    
-                    await page.keyboard.press("Enter")
-                    added_tags_count += 1
-                except Exception as e:
-                    self.logger.warning(f"[!] 添加标签 {topic_name} 失败: {e}")
-                    # 标签添加失败不影响整体上传
-                    continue
+                    try:
+                        # 优化shift+3输入#号
+                        await page.keyboard.down("Shift")  # 按下 Shift
+                        await page.keyboard.press("Digit3")  # 按下主键盘区的 3
+                        await page.keyboard.up("Shift")  # 松开 Shift
+
+                        # 减少等待时间
+                        await page.wait_for_timeout(100)
+
+                        # 减少输入延迟
+                        await page.keyboard.type(topic_name, delay=50)
+
+                        # 减少等待时间
+                        await page.wait_for_timeout(500)
+
+                        await page.keyboard.press("Enter")
+                        added_tags_count += 1
+                    except Exception as e:
+                        self.logger.warning(f"[!] 添加标签 {topic_name} 失败: {e}")
+                        # 标签添加失败不影响整体上传
+                        continue
 
             self.logger.info(f"[+] 成功添加内容和Tag: {added_tags_count}/{len(tags)}")
             return True
