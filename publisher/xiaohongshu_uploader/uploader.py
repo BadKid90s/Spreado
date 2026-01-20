@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
@@ -44,14 +45,14 @@ class XiaoHongShuUploader(BaseUploader):
         ]
 
     async def _upload_video(
-        self,
+            self,
             page: Page,
-        file_path: str | Path,
-        title: str,
-        content: str,
-        tags: List[str],
-        publish_date: Optional[datetime] = None,
-        thumbnail_path: Optional[str | Path] = None,
+            file_path: str | Path,
+            title: str,
+            content: str,
+            tags: List[str],
+            publish_date: Optional[datetime] = None,
+            thumbnail_path: Optional[str | Path] = None,
     ) -> bool:
         """
         上传视频到小红书
@@ -69,7 +70,7 @@ class XiaoHongShuUploader(BaseUploader):
         """
         start_time = time.time()
         self.logger.debug(f"[DEBUG] upload_video 开始执行: {start_time}")
-        
+
         try:
             self.logger.debug(f"[DEBUG] 页面初始化完成: {time.time() - start_time:.2f}秒")
 
@@ -83,17 +84,17 @@ class XiaoHongShuUploader(BaseUploader):
 
             self.logger.info(f"[+] 正在上传视频: {title}")
             upload_start = time.time()
-            
+
             # 上传视频文件
             if not await self._upload_video_file(page, file_path):
                 self.logger.error("[!] 视频文件上传失败，终止上传流程")
                 return False
-            
+
             # 等待上传完成
             if not await self._wait_for_upload_complete(page):
                 self.logger.error("[!] 视频上传未完成，终止上传流程")
                 return False
-            
+
             self.logger.debug(f"[DEBUG] 视频上传完成: {time.time() - upload_start:.2f}秒")
 
             fill_start = time.time()
@@ -101,7 +102,7 @@ class XiaoHongShuUploader(BaseUploader):
             if not await self._fill_video_info(page, title, content, tags):
                 self.logger.error("[!] 视频信息填充失败，终止上传流程")
                 return False
-            
+
             self.logger.debug(f"[DEBUG] 视频信息填充完成: {time.time() - fill_start:.2f}秒")
 
             thumb_start = time.time()
@@ -109,7 +110,7 @@ class XiaoHongShuUploader(BaseUploader):
             if not await self._set_thumbnail(page, thumbnail_path):
                 self.logger.error("[!] 封面设置失败，终止上传流程")
                 return False
-            
+
             self.logger.debug(f"[DEBUG] 封面设置完成: {time.time() - thumb_start:.2f}秒")
 
             if publish_date:
@@ -118,18 +119,17 @@ class XiaoHongShuUploader(BaseUploader):
                 if not await self._set_schedule_time(page, publish_date):
                     self.logger.error("[!] 定时发布设置失败，终止上传流程")
                     return False
-                
-                self.logger.debug(f"[DEBUG] 定时发布设置完成: {time.time() - schedule_start:.2f}秒")
 
+                self.logger.debug(f"[DEBUG] 定时发布设置完成: {time.time() - schedule_start:.2f}秒")
 
             publish_start = time.time()
             # 发布视频
             if not await self._publish_video(page):
                 self.logger.error("[!] 视频发布失败，终止上传流程")
                 return False
-            
+
             self.logger.debug(f"[DEBUG] 视频发布完成: {time.time() - publish_start:.2f}秒")
-            
+
             total_time = time.time() - start_time
             self.logger.info(f"[DEBUG] upload_video 总耗时: {total_time:.2f}秒")
             self.logger.info("[-] 视频发布成功")
@@ -277,7 +277,7 @@ class XiaoHongShuUploader(BaseUploader):
             for i, tag in enumerate(tags):
                 clean_tag = tag.lstrip("#")
                 full_tag = f"#{clean_tag}"
-                self.logger.debug(f"[DEBUG] 添加第 {i+1} 个标签: {full_tag}")
+                self.logger.debug(f"[DEBUG] 添加第 {i + 1} 个标签: {full_tag}")
 
                 # 尝试多种方式添加标签
                 try:
@@ -285,7 +285,7 @@ class XiaoHongShuUploader(BaseUploader):
                     await desc_element.focus()
                     await page.keyboard.press("End")
                     await page.wait_for_timeout(800)  # 增加延迟，确保光标移动到位
-                    
+
                     # 添加一个空格作为分隔符
                     await desc_element.type(" ")
                     await page.wait_for_timeout(800)  # 增加延迟，确保空格输入完成
@@ -293,12 +293,12 @@ class XiaoHongShuUploader(BaseUploader):
                     # 按照用户要求的顺序添加标签：输入#号→输入文字→按回车
                     await desc_element.type("#")
                     await page.wait_for_timeout(500)  # 增加延迟，确保#号输入完成
-                    
+
                     await desc_element.type(clean_tag)
                     await page.wait_for_timeout(1000)  # 增加延迟，确保标签文字输入完成
-                    
+
                     await page.keyboard.press("Enter")
-                    
+
                     added_tags += 1
                     self.logger.debug(f"[DEBUG] 成功添加标签: {full_tag}")
 
@@ -327,66 +327,6 @@ class XiaoHongShuUploader(BaseUploader):
         except Exception as e:
             self.logger.error(f"[!] 填写视频信息时出错: {e}")
             return False
-
-    async def _click_first_visible_element(self, page: Page, selectors: List[str], description: str = "元素", wait_after: int = 0) -> bool:
-        """
-        点击第一个可见的元素
-
-        Args:
-            page: 页面实例
-            selectors: 选择器列表
-            description: 元素描述（用于日志）
-            wait_after: 点击后等待时间（毫秒）
-
-        Returns:
-            是否成功点击
-        """
-        for selector in selectors:
-            try:
-                element = page.locator(selector)
-                count = await element.count()
-                if count > 0:
-                    for i in range(count):
-                        btn = element.nth(i)
-                        is_visible = await btn.is_visible()
-                        if is_visible:
-                            await btn.click(force=True, timeout=3000)
-                            self.logger.info(f"[+] 已点击{description}: {selector}")
-                            if wait_after > 0:
-                                await page.wait_for_timeout(wait_after)
-                            return True
-            except Error:
-                continue
-        return False
-
-    async def _upload_file_to_first_input(self, page: Page, selectors: List[str], file_path: str | Path, accept_type: str = "image") -> bool:
-        """
-        上传文件到第一个匹配的输入框
-
-        Args:
-            page: 页面实例
-            selectors: 选择器列表
-            file_path: 文件路径
-            accept_type: 接受的文件类型
-
-        Returns:
-            是否成功上传
-        """
-        for selector in selectors:
-            try:
-                file_input = page.locator(selector)
-                count = await file_input.count()
-                if count > 0:
-                    for i in range(count):
-                        input_elem = file_input.nth(i)
-                        accept = await input_elem.get_attribute('accept')
-                        if accept and (accept_type in accept or accept == '*'):
-                            await input_elem.set_input_files(file_path)
-                            self.logger.info(f"[+] 已上传{accept_type}文件")
-                            return True
-            except Error:
-                continue
-        return False
 
     async def _set_thumbnail(self, page: Page, thumbnail_path: Optional[str | Path]) -> bool:
         """
@@ -421,82 +361,41 @@ class XiaoHongShuUploader(BaseUploader):
                 'div[class*="cover"]:has-text("设置")'
             ]
 
-            cover_clicked = False
-            for selector in cover_selectors:
-                try:
-                    cover_btn = page.locator(selector).first
-                    if await cover_btn.count() > 0:
-                        await cover_btn.wait_for(state='visible', timeout=5000)
-                        await cover_btn.scroll_into_view_if_needed()
-                        await cover_btn.click(force=True)
-                        self.logger.info(f"[+] 已点击封面设置按钮: {selector}")
-                        await page.wait_for_timeout(2000)  # 等待模态框出现（增加延迟）
-                        
-
-                        # 等待封面设置所需元素加载完成
-                        try:
-                            # 1. 等待目标cover-container元素（包含canvas的那个）
-                            cover_container = page.locator('.canvas-container > .cover-container')
-                            await cover_container.wait_for(state='visible', timeout=10000)
-                            self.logger.info("[+] 已找到封面设置容器")
-                        
-                        except Exception as e:
-                            self.logger.warning(f"[!] 等待封面设置元素时出错: {e}")
-                        cover_clicked = True
-                        break
-                except Exception as e:
-                    self.logger.debug(f"尝试点击封面按钮 {selector} 失败: {e}")
-                    continue
-
-            if not cover_clicked:
-                self.logger.warning("[!] 未找到封面设置按钮，跳过封面设置")
-                return True
-                
-
-            # 根据用户要求，找到accept='image/png, image/jpeg, image/*'的文件输入框并上传图片
-            file_uploaded = False
-            
-            try:
-                self.logger.info("[-] 尝试找到accept属性为'image/png, image/jpeg, image/*'的文件输入框...")
-                
-                # 1. 首先查找精确匹配用户指定accept属性的文件输入框
-                target_input = page.locator("input[type='file'][accept='image/png, image/jpeg, image/*']")
-                if await target_input.count() > 0:
-                    self.logger.info("[+] 找到精确匹配的图片文件输入框")
-                    
-                    # 直接操作这个输入框，无论它是否隐藏
-                    await target_input.set_input_files(thumbnail_path)
-                    self.logger.info(f"[+] 已成功上传封面文件: {thumbnail_path}")
-                    
-                    # 等待上传完成
-                    await page.wait_for_timeout(2000)
-                    
-                    file_uploaded = True
-                else:
-                    self.logger.warning("[!] 未找到任何接受图片的文件输入框")
-            except Exception as e:
-                self.logger.error(f"[!] 上传图片时发生错误: {e}")
-            
-            # 如果上传失败，返回False
-            if not file_uploaded:
-                self.logger.warning("[!] 图片上传失败，请检查网络连接或文件格式")
+            cover_element = await self._find_first_element(page, cover_selectors)
+            if cover_element is None:
+                self.logger.error("[-] 未找到封面设置按钮")
                 return False
 
-            # 点击完成按钮
-            finish_selectors = [
-                'button:has-text("确认")',
-                'button:has-text("确定")', 
-            ]
+            await cover_element.click(force=True)
+            self.logger.info("[+] 已点击封面元素")
+            await page.wait_for_selector(".d-modal:has-text('设置封面')", state='visible', timeout=10000)
+
+            upload_element = page.get_by_text("上传封面", exact=True)
+            if upload_element is None:
+                self.logger.error("[-] 未找上传封面按钮")
+                return False
+            await upload_element.wait_for(state="visible", timeout=10_000)
+            await upload_element.click(force=True,timeout=10000)
+
+            upload_input_selectors = ['input.upload-input[type="file"][accept*="image"]']
+            upload_input_element = await self._find_first_element(page, upload_input_selectors, state='attached')
+            if upload_input_element is None:
+                self.logger.error("[-] 未找上传封面文件输入元素")
+                return False
+
+            # 直接操作这个输入框，无论它是否隐藏
+            await upload_input_element.set_input_files(thumbnail_path)
+            self.logger.info(f"[+] 已成功上传封面文件: {thumbnail_path}")
+
+            # 等待上传完成
+            await page.wait_for_timeout(2000)
 
             # 点击完成按钮
-            finish_clicked = await self._click_first_visible_element(
-                page, finish_selectors, description="完成按钮", wait_after=2000
-            )
-            
-            if not finish_clicked:
-                self.logger.warning("[!] 未找到完成按钮，跳过封面设置")
-                return True
-                
+            finish_selectors = ['button:has-text("确认")', 'button:has-text("确定")', ]
+            finish_element = await self._find_first_element(page, finish_selectors)
+            # 点击完成按钮
+            await finish_element.click(force=True, timeout=3000)
+            self.logger.info(f"[+] 已点击完成按钮")
             self.logger.info("[+] 封面设置完成")
             self.logger.debug(f"[DEBUG] _set_thumbnail 总耗时: {time.time() - start_time:.2f}秒")
             return True
@@ -541,86 +440,28 @@ class XiaoHongShuUploader(BaseUploader):
             except Exception as e2:
                 self.logger.warning(f"[!] 无法点击定时发布标签: {e2}，跳过定时发布设置")
                 return True
-        
+
         try:
-            await page.wait_for_selector('.el-input__inner[placeholder="选择日期和时间"]', state='visible', timeout=5000)
+            await page.wait_for_selector('.el-input__inner[placeholder="选择日期和时间"]', state='visible',
+                                         timeout=5000)
         except Exception as e:
             self.logger.warning(f"[!] 等待日期时间输入框时出错: {e}，跳过定时发布设置")
             return True
-        
+
         try:
             publish_date_hour = publish_date.strftime("%Y-%m-%d %H:%M")
             self.logger.info(f"publish_date_hour: {publish_date_hour}")
-            
+
             # 直接使用fill方法设置日期时间值，更可靠和高效
             datetime_input = page.locator('.el-input__inner[placeholder="选择日期和时间"]')
             await datetime_input.fill(publish_date_hour)
             await page.keyboard.press("Enter")
             await page.wait_for_timeout(500)
-            
+
             self.logger.info("[+] 定时发布时间设置完成")
             return True
         except Exception as e:
             self.logger.error(f"[!] 设置定时发布时间时出错: {e}")
-            return False
-
-    async def _set_location(self, page: Page, location: str):
-        """
-        设置地理位置
-
-        Args:
-            page: 页面实例
-            location: 地理位置
-        """
-        try:
-            self.logger.info(f"开始设置位置: {location}")
-
-            # 等待并点击地点输入框
-            loc_selector = 'div.d-text.d-select-placeholder.d-text-ellipsis.d-text-nowrap'
-            loc_ele = page.locator(loc_selector)
-            await loc_ele.wait_for(state='visible', timeout=10000)
-            await loc_ele.click()
-            self.logger.info("点击地点输入框完成")
-
-            # 输入位置名称
-            await page.wait_for_timeout(1000)
-            await page.keyboard.type(location)
-            self.logger.info(f"位置名称输入完成: {location}")
-
-            # 等待下拉选项出现
-            await page.wait_for_timeout(2000)
-
-            # 尝试多种选择器来定位位置选项
-            location_selectors = [
-                f'text="{location}"',
-                f'div.name:has-text("{location}")',
-                f'div:has-text("{location}"):below(div.d-select-placeholder)',
-                f'div.d-option-item:has-text("{location}")'
-            ]
-
-            selected = False
-            for selector in location_selectors:
-                try:
-                    location_option = page.locator(selector).first
-                    if await location_option.count() > 0:
-                        await location_option.wait_for(state='visible', timeout=5000)
-                        await location_option.scroll_into_view_if_needed()
-                        await location_option.click()
-                        self.logger.info(f"成功选择位置: {location}")
-                        selected = True
-                        break
-                except Exception as e:
-                    self.logger.debug(f"尝试选择器 {selector} 失败: {e}")
-                    continue
-
-            if not selected:
-                self.logger.warning(f"未能找到位置: {location}")
-                return False
-
-            return True
-
-        except Exception as e:
-            self.logger.error(f"设置位置失败: {e}")
             return False
 
     async def _publish_video(self, page: Page) -> bool:
@@ -649,16 +490,16 @@ class XiaoHongShuUploader(BaseUploader):
             try:
                 # 点击并等待 URL 导航到成功页（推荐写法）
                 async with page.expect_navigation(
-                    url=success_pattern,      # 也可以直接用字符串／通配符
-                    wait_until="load",        # 或 "networkidle"，视页面情况而定
-                    timeout=30_000,
+                        url=success_pattern,  # 也可以直接用字符串／通配符
+                        wait_until="load",  # 或 "networkidle"，视页面情况而定
+                        timeout=30_000,
                 ):
                     await publish_button.click(force=True)
 
                 self.logger.info("[-] 视频发布成功")
                 is_published = True
 
-            except PlaywrightTimeoutError:
+            except Error:
                 # 超时：检查当前 URL 是否其实已经是成功页
                 self.logger.warning("[!] 等待页面导航超时")
                 current_url = page.url

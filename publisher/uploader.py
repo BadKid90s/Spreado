@@ -2,9 +2,9 @@ import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Literal, Callable, Awaitable, Any, Dict
 
-from playwright.async_api import Page, Error
+from playwright.async_api import Page, Locator
 
 from conf import BASE_DIR
 from publisher.browser import StealthBrowser
@@ -180,129 +180,10 @@ class BaseUploader(ABC):
 
         try:
 
-            async with await StealthBrowser.create(headless=True) as browser:
+            async with await StealthBrowser.create(headless=False) as browser:
                 await browser.load_cookies_from_file(self.cookie_file_path)
                 self.logger.info(f"[+] 检查页面是否包含登录页元素")
                 async with await browser.new_page() as page:
-                    page = await self.browser.new_page()
-
-                    self.logger.info(f"[-] 正在打开上传页面...")
-                    await page.goto(self.upload_url)
-
-                    result = await self._upload_video(
-                        page=page,
-                        file_path=file_path,
-                        title=title,
-                        content=content,
-                        tags=tags,
-                        publish_date=publish_date,
-                        thumbnail_path=thumbnail_path
-                    )
-                    if result:
-                        self.logger.info(f"[+] 视频上传成功: {title}")
-                    else:
-                        self.logger.error(f"[!] 视频上传失败: {title}")
-                    return result
-
-        except Exception as e:
-            self.logger.error(f"[!] 上传视频时出错: {e}")
-            return False
-
-
-    @property
-    @abstractmethod
-    def _login_selectors(self) -> List[str]:
-        """
-        登录相关的页面元素选择器列表
-
-        Returns:
-            选择器列表，用于检测是否需要登录
-        """
-        pass
-
-    async def _check_login_required(self, page: Page) -> bool:
-        """
-        检查页面是否需要登录
-
-        Args:
-            page: 页面实例
-
-        Returns:
-            是否需要登录
-        """
-        for selector in self._login_selectors:
-            try:
-                element = page.locator(selector)
-                if await element.count() > 0:
-                    if await element.first.is_visible():
-                        return True
-            except Error:
-                continue
-        return False
-
-    async def verify_cookie_flow(self, auto_login: bool = False) -> bool:
-        """
-        确保已登录，如果未登录则执行登录流程
-
-        Args:
-            auto_login: 是否自动执行登录流程
-
-        Returns:
-            是否已登录
-        """
-        if not self.cookie_file_path.exists():
-            self.logger.warning("[!] 账户文件不存在")
-            if auto_login:
-                return await self.login_flow()
-            return False
-
-        if await self._verify_cookie():
-            return True
-
-        if auto_login:
-            return await self.login_flow()
-
-        return False
- 
-    async def upload_video_flow(
-            self,
-            file_path: str | Path,
-            title: str,
-            content: str,
-            tags: List[str],
-            publish_date: Optional[datetime] = None,
-            thumbnail_path: Optional[str | Path] = None,
-            auto_login: bool = False,
-    ) -> bool:
-        """
-        主上传流程，包含登录验证和视频上传
-
-        Args:
-            file_path: 视频文件路径
-            title: 视频标题
-            content: 视频描述
-            tags: 视频标签列表
-            publish_date: 定时发布时间
-            thumbnail_path: 封面图片路径
-            auto_login: 是否自动执行登录流程
-
-        Returns:
-            上传是否成功
-        """
-        self.logger.info(f"[+] 开始上传视频: {title}")
-
-        if not await self.verify_cookie_flow(auto_login=auto_login):
-            self.logger.error("[!] 登录失败，无法上传视频")
-            return False
-
-        try:
-
-            async with await StealthBrowser.create(headless=True) as browser:
-                await browser.load_cookies_from_file(self.cookie_file_path)
-                self.logger.info(f"[+] 检查页面是否包含登录页元素")
-                async with await browser.new_page() as page:
-                    page = await self.browser.new_page()
-
                     self.logger.info(f"[-] 正在打开上传页面...")
                     await page.goto(self.upload_url)
 
@@ -434,63 +315,75 @@ class BaseUploader(ABC):
         """
         pass
 
-    async def upload(
+
+    async def _find_first_element(
             self,
-            file_path: str | Path,
-            title: str,
-            content: str,
-            tags: List[str],
-            publish_date: Optional[datetime] = None,
-            thumbnail_path: Optional[str | Path] = None,
-            auto_login: bool = False,
-    ) -> bool:
+            page: Page,
+            selectors: List[str],
+            *,
+            timeout: int = 5000,
+            state: Literal['visible', 'attached', 'hidden', 'detached'] = 'visible',
+            callback: Optional[Callable[[Locator, Page, Dict[str, Any]], Awaitable[Any]]] = None,
+            on_not_found: Optional[Callable[[Page, List[str]], Awaitable[None]]] = None,
+    ) -> Optional[Locator]:
         """
-        主上传流程，包含登录验证和视频上传
+        通过多个选择器查找第一个可用元素（增强版）
 
         Args:
-            file_path: 视频文件路径
-            title: 视频标题
-            content: 视频描述
-            tags: 视频标签列表
-            publish_date: 定时发布时间
-            thumbnail_path: 封面图片路径
-            auto_login: 是否自动执行登录流程
+            page: Playwright 页面对象
+            selectors: 选择器列表
+            timeout: 等待超时时间（毫秒）
+            state: 元素期望状态
+            callback: 找到元素的回调
+                     async def callback(element: Locator, page: Page, info: Dict) -> Any
+                     info 包含: selector, index, total
+            on_not_found: 未找到元素的回调
+                         async def callback(page: Page, selectors: List[str]) -> None
 
         Returns:
-            上传是否成功
+            找到的元素或 None
         """
-        self.logger.info(f"[+] 开始上传视频: {title}")
+        for idx, selector in enumerate(selectors):
+            try:
+                element = page.locator(selector).first
 
-        if not await self.verify_cookie(auto_login=auto_login):
-            self.logger.error("[!] 登录失败，无法上传视频")
-            return False
+                # 检查元素数量
+                count = await element.count()
+                if count == 0:
+                    self.logger.debug(f"[-] 选择器未匹配 [{idx + 1}/{len(selectors)}]: {selector}")
+                    continue
 
-        try:
+                # 等待元素状态
+                await element.wait_for(state=state, timeout=timeout)
 
-            async with await StealthBrowser.create(headless=True) as browser:
-                await browser.load_cookies_from_file(self.cookie_file_path)
-                self.logger.info(f"[+] 检查页面是否包含登录页元素")
-                async with await browser.new_page() as page:
-                    page = await self.browser.new_page()
+                self.logger.info(f"[✓] 找到元素 [{idx + 1}/{len(selectors)}]: {selector}")
 
-                    self.logger.info(f"[-] 正在打开上传页面...")
-                    await page.goto(self.upload_url)
+                # 构建信息字典
+                info = {
+                    'selector': selector,
+                    'index': idx,
+                    'total': len(selectors),
+                    'count': count,
+                    'state': state
+                }
 
-                    result = await self.upload_video(
-                        page=page,
-                        file_path=file_path,
-                        title=title,
-                        content=content,
-                        tags=tags,
-                        publish_date=publish_date,
-                        thumbnail_path=thumbnail_path
-                    )
-                    if result:
-                        self.logger.info(f"[+] 视频上传成功: {title}")
-                    else:
-                        self.logger.error(f"[!] 视频上传失败: {title}")
-                    return result
+                # 执行回调
+                if callback:
+                    result = await callback(element, page, info)
+                    # 如果回调返回值，可以在这里处理
+                    if result is not None:
+                        self.logger.debug(f"回调返回: {result}")
 
-        except Exception as e:
-            self.logger.error(f"[!] 上传视频时出错: {e}")
-            return False
+                return element
+
+            except Exception as e:
+                self.logger.debug(f"[-] 选择器失败 [{idx + 1}/{len(selectors)}] {selector}: {e}")
+                continue
+
+        # 所有选择器都失败
+        self.logger.error(f"[✗] 所有 {len(selectors)} 个选择器均未找到元素")
+
+        if on_not_found:
+            await on_not_found(page, selectors)
+
+        return None
