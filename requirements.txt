@@ -1,0 +1,11 @@
+DateTime==6.0
+greenlet==3.3.0
+loguru==0.7.3
+playwright==1.57.0
+playwright-stealth==2.0.1
+pyee==13.0.0
+pytz==2025.2
+setuptools==80.9.0
+timedelta==2020.12.3
+typing_extensions==4.15.0
+zope.interface==8.2
