@@ -38,7 +38,7 @@ class KuaiShouUploader(BaseUploader):
         return "https://cp.kuaishou.com/article/manage/video?status=2&from=publish"
 
     @property
-    def login_selectors(self) -> List[str]:
+    def _login_selectors(self) -> List[str]:
         return [
             'text="立即登录"',
             'text="扫码登录"',
@@ -46,7 +46,7 @@ class KuaiShouUploader(BaseUploader):
             '.login-btn'
         ]
 
-    async def upload_video(
+    async def _upload_video(
         self,
         page: Page,
         file_path: str | Path,

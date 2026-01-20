@@ -225,7 +225,7 @@ async def upload_action(
             return False
 
     try:
-        result = await uploader.upload_video(
+        result = await uploader.upload_video_flow(
             file_path=file_path,
             title=title,
             content=content,

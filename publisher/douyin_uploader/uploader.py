@@ -35,7 +35,7 @@ class DouYinUploader(BaseUploader):
         return "https://creator.douyin.com/creator-micro/content/manage"
 
     @property
-    def login_selectors(self) -> List[str]:
+    def _login_selectors(self) -> List[str]:
         return [
             'text="手机号登录"',
             'text="扫码登录"',
@@ -43,7 +43,7 @@ class DouYinUploader(BaseUploader):
             '.login-btn'
         ]
 
-    async def upload_video(
+    async def _upload_video(
         self,
         page: Page,
         file_path: str | Path,

@@ -55,7 +55,7 @@ class ShiPinHaoUploader(BaseUploader):
         return "https://channels.weixin.qq.com/platform"
 
     @property
-    def login_selectors(self) -> List[str]:
+    def _login_selectors(self) -> List[str]:
         return [
             'div.qrcode-wrap',
             'text="登录"',
@@ -63,7 +63,7 @@ class ShiPinHaoUploader(BaseUploader):
             '.login-btn'
         ]
 
-    async def upload_video(
+    async def _upload_video(
         self,
         page: Page,
         file_path: str | Path,

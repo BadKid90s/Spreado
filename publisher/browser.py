@@ -1,8 +1,9 @@
 import os
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, Union, cast
 
-from playwright.async_api import async_playwright, Page, BrowserContext, Browser, Playwright
+import json
+from playwright.async_api import async_playwright, Page, BrowserContext, Browser, Playwright, Cookie
 from playwright_stealth import Stealth
 
 
@@ -62,22 +63,46 @@ class StealthBrowser:
             raise RuntimeError("Context 未初始化")
         return await self.context.new_page()
 
-    async def load_cookies_from_file(self, file_path: str | Path):
+    async def load_cookies_from_file(self, file_path: str | Path) -> None:
         """
         从 JSON 文件加载 Cookie 并注入到当前上下文
-        自动处理类型转换，消除 IDE 报错
+
+        支持两种文件格式：
+        1. Playwright storage_state 文件（包含 "cookies" 字段）
+        2. 仅为 cookies 列表的纯 JSON
         """
-        if not self.context:
+        if self.context is None:
             raise RuntimeError("Context 未初始化")
 
         path = Path(file_path)
-        if not path.exists():
-            print(f"[警告] Cookie 文件不存在: {path}")
-            return
+        if not path.is_file():
+            # 如有 logger 建议用 logger，这里先用 print 占位
+            raise RuntimeError(f"[警告] Cookie 文件不存在: {path}")
 
-        context_options = {"storage_state": str(file_path)}
-        # 注入 Cookie
-        await self.context.add_cookies(**context_options)
+        try:
+            with path.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception as e:
+            raise RuntimeError(f"[错误] 读取 Cookie 文件失败: {path}，错误: {e}")
+
+        # 1. 兼容 Playwright 的 storage_state 结构
+        #    {"cookies": [...], "origins": [...]}
+        if isinstance(data, dict) and "cookies" in data:
+            raw_cookies = data["cookies"]
+        else:
+            # 2. 兼容直接是 cookies 列表的情况
+            raw_cookies = data
+
+        if not isinstance(raw_cookies, list):
+            raise RuntimeError(f"[错误] Cookie 文件格式不正确，应为列表或包含 'cookies' 字段: {path}")
+
+        # 强制转换成 Playwright Cookie 类型，方便 IDE 类型检查
+        cookies = raw_cookies
+
+        if not cookies:
+            raise RuntimeError(f"[提示] Cookie 文件为空: {path}")
+
+        await self.context.add_cookies(cookies)
 
     async def storage_state(self, path: Path | str):
         """保存当前 Cookie 到文件"""

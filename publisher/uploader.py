@@ -96,7 +96,7 @@ class BaseUploader(ABC):
 
     @property
     @abstractmethod
-    def login_selectors(self) -> List[str]:
+    def _login_selectors(self) -> List[str]:
         """
         登录相关的页面元素选择器列表
 
@@ -115,7 +115,7 @@ class BaseUploader(ABC):
         Returns:
             是否需要登录
         """
-        for selector in self.login_selectors:
+        for selector in self._login_selectors:
             try:
                 element = page.locator(selector)
                 if await element.count() > 0:
@@ -203,7 +203,7 @@ class BaseUploader(ABC):
             self.logger.error(f"[!] 验证Cookie时出错: {e}")
             return False
 
-    async def verify_cookie(self, auto_login: bool = False) -> bool:
+    async def verify_cookie_flow(self, auto_login: bool = False) -> bool:
         """
         确保已登录，如果未登录则执行登录流程
 
@@ -228,7 +228,7 @@ class BaseUploader(ABC):
         return False
 
     @abstractmethod
-    async def upload_video(
+    async def _upload_video(
             self,
             page: Page,
             file_path: str | Path,
@@ -255,7 +255,7 @@ class BaseUploader(ABC):
         """
         pass
 
-    async def upload(
+    async def upload_video_flow(
             self,
             file_path: str | Path,
             title: str,
@@ -282,22 +282,20 @@ class BaseUploader(ABC):
         """
         self.logger.info(f"[+] 开始上传视频: {title}")
 
-        if not await self.verify_cookie(auto_login=auto_login):
+        if not await self.verify_cookie_flow(auto_login=auto_login):
             self.logger.error("[!] 登录失败，无法上传视频")
             return False
 
         try:
 
-            async with await StealthBrowser.create(headless=True) as browser:
+            async with await StealthBrowser.create(headless=False) as browser:
                 await browser.load_cookies_from_file(self.cookie_file_path)
                 self.logger.info(f"[+] 检查页面是否包含登录页元素")
                 async with await browser.new_page() as page:
-                    page = await self.browser.new_page()
-
                     self.logger.info(f"[-] 正在打开上传页面...")
                     await page.goto(self.upload_url)
 
-                    result = await self.upload_video(
+                    result = await self._upload_video(
                         page=page,
                         file_path=file_path,
                         title=title,

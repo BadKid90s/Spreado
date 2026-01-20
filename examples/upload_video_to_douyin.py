@@ -24,9 +24,9 @@ async def main():
 
     uploader = DouYinUploader()
 
-    await uploader.verify_cookie(auto_login=False)
+    await uploader.verify_cookie_flow(auto_login=False)
 
-    result = await uploader.upload(
+    result = await uploader.upload_video_flow(
         file_path=file_path,
         title=title,
         content=content,
