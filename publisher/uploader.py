@@ -94,6 +94,121 @@ class BaseUploader(ABC):
         """
         pass
 
+    async def login_flow(self) -> bool:
+        """
+        有头模式登录流程
+
+        Returns:
+            登录是否成功
+        """
+        try:
+            async with await StealthBrowser.create(headless=False) as browser:
+                page = await browser.new_page()
+                await page.goto(self.login_url)
+                self.logger.info(f"[+] 已打开登录页面，请在浏览器中完成登录操作")
+                # 1. 直接等待目标 URL 出现
+                await page.wait_for_url(
+                    url= self.login_success_url,
+                    timeout=60000,
+                    wait_until="commit"
+                )
+                # 2. 到了这里说明 URL 匹配成功
+                self.cookie_file_path.parent.mkdir(parents=True, exist_ok=True)
+                # 注意：storage_state 通常属于 context，建议直接通过 page 获取 context
+                await page.context.storage_state(path=self.cookie_file_path)
+                self.logger.info(f"[+] Cookie已保存到: {self.cookie_file_path}")
+                self.logger.info("[+] 登录成功，Cookie已保存")
+                return True
+        except (Error, Exception) as e:
+            self.logger.error(f"[!] 登录过程中出错: {e}")
+            return False
+
+    async def verify_cookie_flow(self, auto_login: bool = False) -> bool:
+        """
+        确保已登录，如果未登录则执行登录流程
+
+        Args:
+            auto_login: 是否自动执行登录流程
+
+        Returns:
+            是否已登录
+        """
+        if not self.cookie_file_path.exists():
+            self.logger.warning("[!] 账户文件不存在")
+            if auto_login:
+                return await self.login_flow()
+            return False
+
+        if await self._verify_cookie():
+            return True
+
+        if auto_login:
+            return await self.login_flow()
+
+        return False
+ 
+    async def upload_video_flow(
+            self,
+            file_path: str | Path,
+            title: str,
+            content: str,
+            tags: List[str],
+            publish_date: Optional[datetime] = None,
+            thumbnail_path: Optional[str | Path] = None,
+            auto_login: bool = False,
+    ) -> bool:
+        """
+        主上传流程，包含登录验证和视频上传
+
+        Args:
+            file_path: 视频文件路径
+            title: 视频标题
+            content: 视频描述
+            tags: 视频标签列表
+            publish_date: 定时发布时间
+            thumbnail_path: 封面图片路径
+            auto_login: 是否自动执行登录流程
+
+        Returns:
+            上传是否成功
+        """
+        self.logger.info(f"[+] 开始上传视频: {title}")
+
+        if not await self.verify_cookie_flow(auto_login=auto_login):
+            self.logger.error("[!] 登录失败，无法上传视频")
+            return False
+
+        try:
+
+            async with await StealthBrowser.create(headless=True) as browser:
+                await browser.load_cookies_from_file(self.cookie_file_path)
+                self.logger.info(f"[+] 检查页面是否包含登录页元素")
+                async with await browser.new_page() as page:
+                    page = await self.browser.new_page()
+
+                    self.logger.info(f"[-] 正在打开上传页面...")
+                    await page.goto(self.upload_url)
+
+                    result = await self._upload_video(
+                        page=page,
+                        file_path=file_path,
+                        title=title,
+                        content=content,
+                        tags=tags,
+                        publish_date=publish_date,
+                        thumbnail_path=thumbnail_path
+                    )
+                    if result:
+                        self.logger.info(f"[+] 视频上传成功: {title}")
+                    else:
+                        self.logger.error(f"[!] 视频上传失败: {title}")
+                    return result
+
+        except Exception as e:
+            self.logger.error(f"[!] 上传视频时出错: {e}")
+            return False
+
+
     @property
     @abstractmethod
     def _login_selectors(self) -> List[str]:
@@ -125,34 +240,122 @@ class BaseUploader(ABC):
                 continue
         return False
 
-    async def login_flow(self) -> bool:
+    async def verify_cookie_flow(self, auto_login: bool = False) -> bool:
         """
-        有头模式登录流程
+        确保已登录，如果未登录则执行登录流程
+
+        Args:
+            auto_login: 是否自动执行登录流程
 
         Returns:
-            登录是否成功
+            是否已登录
         """
-        try:
-            async with await StealthBrowser.create(headless=False) as browser:
-                page = await browser.new_page()
-                await page.goto(self.login_url)
-                self.logger.info(f"[+] 已打开登录页面，请在浏览器中完成登录操作")
-                # 1. 直接等待目标 URL 出现
-                await page.wait_for_url(
-                    url= self.login_success_url,
-                    timeout=60000,
-                    wait_until="commit"
-                )
-                # 2. 到了这里说明 URL 匹配成功
-                self.cookie_file_path.parent.mkdir(parents=True, exist_ok=True)
-                # 注意：storage_state 通常属于 context，建议直接通过 page 获取 context
-                await page.context.storage_state(path=self.cookie_file_path)
-                self.logger.info(f"[+] Cookie已保存到: {self.cookie_file_path}")
-                self.logger.info("[+] 登录成功，Cookie已保存")
-                return True
-        except (Error, Exception) as e:
-            self.logger.error(f"[!] 登录过程中出错: {e}")
+        if not self.cookie_file_path.exists():
+            self.logger.warning("[!] 账户文件不存在")
+            if auto_login:
+                return await self.login_flow()
             return False
+
+        if await self._verify_cookie():
+            return True
+
+        if auto_login:
+            return await self.login_flow()
+
+        return False
+ 
+    async def upload_video_flow(
+            self,
+            file_path: str | Path,
+            title: str,
+            content: str,
+            tags: List[str],
+            publish_date: Optional[datetime] = None,
+            thumbnail_path: Optional[str | Path] = None,
+            auto_login: bool = False,
+    ) -> bool:
+        """
+        主上传流程，包含登录验证和视频上传
+
+        Args:
+            file_path: 视频文件路径
+            title: 视频标题
+            content: 视频描述
+            tags: 视频标签列表
+            publish_date: 定时发布时间
+            thumbnail_path: 封面图片路径
+            auto_login: 是否自动执行登录流程
+
+        Returns:
+            上传是否成功
+        """
+        self.logger.info(f"[+] 开始上传视频: {title}")
+
+        if not await self.verify_cookie_flow(auto_login=auto_login):
+            self.logger.error("[!] 登录失败，无法上传视频")
+            return False
+
+        try:
+
+            async with await StealthBrowser.create(headless=True) as browser:
+                await browser.load_cookies_from_file(self.cookie_file_path)
+                self.logger.info(f"[+] 检查页面是否包含登录页元素")
+                async with await browser.new_page() as page:
+                    page = await self.browser.new_page()
+
+                    self.logger.info(f"[-] 正在打开上传页面...")
+                    await page.goto(self.upload_url)
+
+                    result = await self._upload_video(
+                        page=page,
+                        file_path=file_path,
+                        title=title,
+                        content=content,
+                        tags=tags,
+                        publish_date=publish_date,
+                        thumbnail_path=thumbnail_path
+                    )
+                    if result:
+                        self.logger.info(f"[+] 视频上传成功: {title}")
+                    else:
+                        self.logger.error(f"[!] 视频上传失败: {title}")
+                    return result
+
+        except Exception as e:
+            self.logger.error(f"[!] 上传视频时出错: {e}")
+            return False
+
+
+    @property
+    @abstractmethod
+    def _login_selectors(self) -> List[str]:
+        """
+        登录相关的页面元素选择器列表
+
+        Returns:
+            选择器列表，用于检测是否需要登录
+        """
+        pass
+
+    async def _check_login_required(self, page: Page) -> bool:
+        """
+        检查页面是否需要登录
+
+        Args:
+            page: 页面实例
+
+        Returns:
+            是否需要登录
+        """
+        for selector in self._login_selectors:
+            try:
+                element = page.locator(selector)
+                if await element.count() > 0:
+                    if await element.first.is_visible():
+                        return True
+            except Error:
+                continue
+        return False
 
     def _is_target_url(self, current_url: str) -> bool:
         """
@@ -203,30 +406,6 @@ class BaseUploader(ABC):
             self.logger.error(f"[!] 验证Cookie时出错: {e}")
             return False
 
-    async def verify_cookie_flow(self, auto_login: bool = False) -> bool:
-        """
-        确保已登录，如果未登录则执行登录流程
-
-        Args:
-            auto_login: 是否自动执行登录流程
-
-        Returns:
-            是否已登录
-        """
-        if not self.cookie_file_path.exists():
-            self.logger.warning("[!] 账户文件不存在")
-            if auto_login:
-                return await self.login_flow()
-            return False
-
-        if await self._verify_cookie():
-            return True
-
-        if auto_login:
-            return await self.login_flow()
-
-        return False
-
     @abstractmethod
     async def _upload_video(
             self,
@@ -255,7 +434,7 @@ class BaseUploader(ABC):
         """
         pass
 
-    async def upload_video_flow(
+    async def upload(
             self,
             file_path: str | Path,
             title: str,
@@ -282,20 +461,22 @@ class BaseUploader(ABC):
         """
         self.logger.info(f"[+] 开始上传视频: {title}")
 
-        if not await self.verify_cookie_flow(auto_login=auto_login):
+        if not await self.verify_cookie(auto_login=auto_login):
             self.logger.error("[!] 登录失败，无法上传视频")
             return False
 
         try:
 
-            async with await StealthBrowser.create(headless=False) as browser:
+            async with await StealthBrowser.create(headless=True) as browser:
                 await browser.load_cookies_from_file(self.cookie_file_path)
                 self.logger.info(f"[+] 检查页面是否包含登录页元素")
                 async with await browser.new_page() as page:
+                    page = await self.browser.new_page()
+
                     self.logger.info(f"[-] 正在打开上传页面...")
                     await page.goto(self.upload_url)
 
-                    result = await self._upload_video(
+                    result = await self.upload_video(
                         page=page,
                         file_path=file_path,
                         title=title,

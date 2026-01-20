@@ -27,7 +27,7 @@ class KuaiShouUploader(BaseUploader):
 
     @property
     def login_success_url(self) -> str:
-        return ""
+        return "https://www.kuaishou.com/new-reco"
 
     @property
     def upload_url(self) -> str:
@@ -53,9 +53,8 @@ class KuaiShouUploader(BaseUploader):
         title: str,
         content: str,
         tags: List[str],
-        publish_date: Optional[datetime] = None,
+        publish_date: Optional[datetime] = None, 
         thumbnail_path: Optional[str | Path] = None,
-        **kwargs
     ) -> bool:
         """
         上传视频到快手
@@ -68,7 +67,6 @@ class KuaiShouUploader(BaseUploader):
             tags: 视频标签列表
             publish_date: 定时发布时间
             thumbnail_path: 封面图片路径
-            **kwargs: 其他参数
 
         Returns:
             上传是否成功

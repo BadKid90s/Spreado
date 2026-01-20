@@ -52,7 +52,6 @@ class XiaoHongShuUploader(BaseUploader):
         tags: List[str],
         publish_date: Optional[datetime] = None,
         thumbnail_path: Optional[str | Path] = None,
-        **kwargs
     ) -> bool:
         """
         上传视频到小红书
@@ -65,8 +64,6 @@ class XiaoHongShuUploader(BaseUploader):
             tags: 视频标签列表
             publish_date: 定时发布时间
             thumbnail_path: 封面图片路径
-            **kwargs: 其他参数（如location等）
-
         Returns:
             上传是否成功
         """
@@ -124,12 +121,6 @@ class XiaoHongShuUploader(BaseUploader):
                 
                 self.logger.debug(f"[DEBUG] 定时发布设置完成: {time.time() - schedule_start:.2f}秒")
 
-            location = kwargs.get("location")
-            if location:
-                # 设置位置
-                if not await self._set_location(page, location):
-                    self.logger.error("[!] 位置设置失败，终止上传流程")
-                    return False
 
             publish_start = time.time()
             # 发布视频
@@ -642,75 +633,51 @@ class XiaoHongShuUploader(BaseUploader):
         Returns:
             是否成功发布视频
         """
-        # 创建一个事件来标记导航完成
-        import asyncio
-        navigation_completed = asyncio.Event()
-        navigation_history = []
+        is_published = False
+        success_pattern = re.compile(r"/success|published=true")
 
-        # 定义导航事件处理函数
-        async def on_framenavigated(frame):
-            nonlocal navigation_history, is_published
-            
-            if frame == page.main_frame:
-                url = frame.url
-                navigation_history.append(url)
-                self.logger.debug(f"[DEBUG] 页面导航到: {url}")
-                
-                # 检查是否到达成功页面
-                if "/success" in url or "published=true" in url:
-                    is_published = True
-                    navigation_completed.set()
-        
+        # 精确定位发布按钮
+        publish_button = page.locator("button.publishBtn")
+
         try:
-            # 注册导航事件监听器
-            page.on("framenavigated", on_framenavigated)
-            
-            # 点击发布按钮 - 使用更精确的publishBtn类选择器
-            publish_button = page.locator('button.publishBtn')
+            # 确保按钮可见
             await publish_button.scroll_into_view_if_needed()
-            await publish_button.wait_for(state="visible", timeout=10000)
-            await publish_button.click(force=True)
+            await publish_button.wait_for(state="visible", timeout=10_000)
+
             self.logger.info("[-] 已点击发布按钮，等待页面导航...")
-            
-            # 等待导航完成或超时（最多30秒）
+
             try:
-                await asyncio.wait_for(navigation_completed.wait(), timeout=30.0)
+                # 点击并等待 URL 导航到成功页（推荐写法）
+                async with page.expect_navigation(
+                    url=success_pattern,      # 也可以直接用字符串／通配符
+                    wait_until="load",        # 或 "networkidle"，视页面情况而定
+                    timeout=30_000,
+                ):
+                    await publish_button.click(force=True)
+
                 self.logger.info("[-] 视频发布成功")
                 is_published = True
-            except asyncio.TimeoutError:
+
+            except PlaywrightTimeoutError:
+                # 超时：检查当前 URL 是否其实已经是成功页
                 self.logger.warning("[!] 等待页面导航超时")
-                
-                # 检查当前URL
                 current_url = page.url
                 self.logger.debug(f"[DEBUG] 超时后的页面URL: {current_url}")
-                
-                # 检查是否已成功
-                if "/success" in current_url or "published=true" in current_url:
-                    self.logger.info("[-] 视频发布成功")
+
+                if success_pattern.search(current_url):
+                    self.logger.info("[-] 视频发布成功（超时后检查到成功URL）")
                     is_published = True
                 else:
-                    # 检查导航历史
-                    self.logger.debug(f"[DEBUG] 导航历史: {navigation_history}")
-                    # 虽然超时，但发布按钮已点击，可能已发布
-                    self.logger.warning(f"[!] 发布后未检测到预期的成功URL")
-                    self.logger.error("[-] 视频发布失败")
-                    is_published = False
-        
+                    self.logger.error("[-] 视频发布失败，未检测到成功URL")
+
         except Exception as e:
-            self.logger.error(f"[!] 发布视频时出错: {e}")
-            
-            # 即使出错也检查URL和导航历史
+            # 捕获其它异常，同样最后兜底检查 URL
+            self.logger.exception(f"[!] 发布视频时出错: {e}")
             current_url = page.url
             self.logger.debug(f"[DEBUG] 出错时的当前URL: {current_url}")
-            self.logger.debug(f"[DEBUG] 导航历史: {navigation_history}")
-            
-            if "/success" in current_url or "published=true" in current_url:
-                self.logger.info("[-] 视频发布成功")
+
+            if success_pattern.search(current_url):
+                self.logger.info("[-] 视频发布成功（异常后检查到成功URL）")
                 is_published = True
-            else:
-                is_published = False
-        finally:
-            # 移除事件监听器
-            page.remove_listener("framenavigated", on_framenavigated)
-        
+
         return is_published

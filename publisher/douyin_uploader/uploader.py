@@ -24,7 +24,7 @@ class DouYinUploader(BaseUploader):
 
     @property
     def login_success_url(self) -> str:
-        return ""
+        return "https://creator.douyin.com/creator-micro/home"
 
     @property
     def upload_url(self) -> str:
@@ -32,7 +32,7 @@ class DouYinUploader(BaseUploader):
 
     @property
     def success_url_pattern(self) -> str:
-        return "https://creator.douyin.com/creator-micro/content/manage"
+        return "https://creator.douyin.com/creator-micro/content/manage?enter_from=publish"
 
     @property
     def _login_selectors(self) -> List[str]:
@@ -52,7 +52,6 @@ class DouYinUploader(BaseUploader):
         tags: List[str],
         publish_date: Optional[datetime] = None,
         thumbnail_path: Optional[str | Path] = None,
-        **kwargs
     ) -> bool:
         """
         上传视频到抖音
@@ -65,7 +64,6 @@ class DouYinUploader(BaseUploader):
             tags: 视频标签列表
             publish_date: 定时发布时间
             thumbnail_path: 封面图片路径
-            **kwargs: 其他参数（如location, product_link, product_title等）
 
         Returns:
             上传是否成功
@@ -113,21 +111,6 @@ class DouYinUploader(BaseUploader):
             if not await self._handle_auto_video_cover(page):
                 self.logger.error("[!] 封面设置失败，终止上传流程")
                 return False
-
-            location = kwargs.get("location")
-            if location:
-                # 设置位置
-                if not await self._set_location(page, location):
-                    self.logger.error("[!] 位置设置失败，终止上传流程")
-                    return False
-
-            product_link = kwargs.get("product_link")
-            product_title = kwargs.get("product_title")
-            if product_link and product_title:
-                # 设置商品链接
-                if not await self._set_product_link(page, product_link, product_title):
-                    self.logger.error("[!] 商品链接设置失败，终止上传流程")
-                    return False
 
             # 发布视频
             if not await self._publish_video(page):

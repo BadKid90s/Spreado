@@ -44,7 +44,7 @@ class ShiPinHaoUploader(BaseUploader):
 
     @property
     def login_success_url(self) -> str:
-        return ""
+        return "https://channels.weixin.qq.com/platform"
 
     @property
     def upload_url(self) -> str:
@@ -52,7 +52,7 @@ class ShiPinHaoUploader(BaseUploader):
 
     @property
     def success_url_pattern(self) -> str:
-        return "https://channels.weixin.qq.com/platform"
+        return "https://channels.weixin.qq.com/platform/post/list"
 
     @property
     def _login_selectors(self) -> List[str]:

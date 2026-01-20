@@ -5,12 +5,11 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional, List
 
-from uploader.douyin_uploader import DouYinUploader
-from uploader.xiaohongshu_uploader import XiaoHongShuUploader
-from uploader.kuaishou_uploader import KuaiShouUploader
-from uploader.shipinhao_uploader import ShipinhaoUploader
+from publisher.douyin_uploader import DouYinUploader
+from publisher.xiaohongshu_uploader import XiaoHongShuUploader
+from publisher.kuaishou_uploader import KuaiShouUploader
+from publisher.shipinhao_uploader import ShiPinHaoUploader
 from utils.files_times import get_title_and_hashtags
-from uploader.auth_manager import AuthManager
 from utils.log import get_logger
 
 
@@ -18,7 +17,7 @@ PLATFORMS = {
     "douyin": DouYinUploader,
     "xiaohongshu": XiaoHongShuUploader,
     "kuaishou": KuaiShouUploader,
-    "shipinhao": ShipinhaoUploader,
+    "shipinhao": ShiPinHaoUploader,
 }
 
 ACTIONS = ["login", "upload", "verify", "status"]
@@ -26,7 +25,7 @@ ACTIONS = ["login", "upload", "verify", "status"]
 logger = get_logger("CLI")
 
 
-def get_account_file(platform: str) -> Path:
+def get_cookie_file_path(platform: str) -> Path:
     """
     获取账户文件路径
 
@@ -40,13 +39,12 @@ def get_account_file(platform: str) -> Path:
     return COOKIES_DIR / f"{platform}_uploader" / "account.json"
 
 
-def get_uploader(platform: str, headless: bool = None) -> Optional:
+def get_uploader(platform: str) -> Optional:
     """
     获取上传器实例
 
     Args:
         platform: 平台名称
-        headless: 是否使用无头模式
 
     Returns:
         上传器实例
@@ -56,13 +54,13 @@ def get_uploader(platform: str, headless: bool = None) -> Optional:
         logger.info(f"支持的平台: {', '.join(PLATFORMS.keys())}")
         return None
 
-    account_file = get_account_file(platform)
+    cookie_file_path = get_cookie_file_path(platform)
     uploader_class = PLATFORMS[platform]
 
-    return uploader_class(account_file=account_file, headless=headless)
+    return uploader_class(cookie_file_path=cookie_file_path)
 
 
-async def login_action(platform: str, headless: bool = False):
+async def login_action(platform: str,):
     """
     执行登录操作
 
@@ -70,14 +68,13 @@ async def login_action(platform: str, headless: bool = False):
         platform: 平台名称
         headless: 是否使用无头模式
     """
-    uploader = get_uploader(platform, headless=False)
+    uploader = get_uploader(platform)
     if not uploader:
         return False
 
     logger.info(f"[+] 开始登录 {platform} 平台...")
 
-    auth_manager = AuthManager(uploader)
-    result = await auth_manager.perform_login(headless=headless)
+    result = await uploader.login_flow()
 
     if result:
         logger.info(f"[+] {platform} 平台登录成功")
@@ -94,21 +91,24 @@ async def verify_action(platform: str):
     Args:
         platform: 平台名称
     """
-    uploader = get_uploader(platform, headless=True)
+    uploader = get_uploader(platform)
     if not uploader:
         return False
 
     logger.info(f"[+] 开始验证 {platform} 平台Cookie...")
 
-    auth_manager = AuthManager(uploader)
-    status = await auth_manager.get_auth_status()
+    account_file_exists = uploader.cookie_file_path.exists()
+    cookie_valid = False
+    if account_file_exists:
+        cookie_valid = await uploader._verify_cookie()
+    authenticated = account_file_exists and cookie_valid
 
     logger.info(f"[+] {platform} 平台认证状态:")
-    logger.info(f"    账户文件存在: {status['account_file_exists']}")
-    logger.info(f"    Cookie有效: {status['cookie_valid']}")
-    logger.info(f"    已认证: {status['authenticated']}")
+    logger.info(f"    账户文件存在: {account_file_exists}")
+    logger.info(f"    Cookie有效: {cookie_valid}")
+    logger.info(f"    已认证: {authenticated}")
 
-    return status['authenticated']
+    return authenticated
 
 
 async def status_action(platform: str):
@@ -118,20 +118,23 @@ async def status_action(platform: str):
     Args:
         platform: 平台名称
     """
-    uploader = get_uploader(platform, headless=True)
+    uploader = get_uploader(platform)
     if not uploader:
         return False
 
-    auth_manager = AuthManager(uploader)
-    status = await auth_manager.get_auth_status()
+    account_file_exists = uploader.cookie_file_path.exists()
+    cookie_valid = False
+    if account_file_exists:
+        cookie_valid = await uploader._verify_cookie()
+    authenticated = account_file_exists and cookie_valid
 
     print(f"\n{platform.upper()} 平台认证状态:")
-    print(f"  账户文件: {'存在' if status['account_file_exists'] else '不存在'}")
-    print(f"  Cookie状态: {'有效' if status['cookie_valid'] else '无效'}")
-    print(f"  认证状态: {'已认证' if status['authenticated'] else '未认证'}")
+    print(f"  账户文件: {'存在' if account_file_exists else '不存在'}")
+    print(f"  Cookie状态: {'有效' if cookie_valid else '无效'}")
+    print(f"  认证状态: {'已认证' if authenticated else '未认证'}")
     print()
 
-    return status['authenticated']
+    return authenticated
 
 
 async def upload_action(
@@ -144,9 +147,8 @@ async def upload_action(
     thumbnail: Optional[str] = None,
     publish_date: Optional[str] = None,
     auto_login: bool = True,
-    **kwargs
 ):
-    """
+    """W
     执行上传操作
 
     Args:
@@ -159,9 +161,8 @@ async def upload_action(
         thumbnail: 封面图片路径
         publish_date: 定时发布时间
         auto_login: 是否自动登录
-        **kwargs: 其他平台特定参数
     """
-    uploader = get_uploader(platform, headless=True)
+    uploader = get_uploader(platform)
     if not uploader:
         return False
 
@@ -232,7 +233,7 @@ async def upload_action(
             tags=tags,
             publish_date=publish_datetime,
             thumbnail_path=thumbnail,
-            **kwargs
+            auto_login=auto_login,
         )
 
         if result:
@@ -341,19 +342,8 @@ def main():
     if args.tags:
         tags = [tag.strip() for tag in args.tags.split(",")]
 
-    kwargs = {}
-    if args.platform == "douyin":
-        location = getattr(args, "location", None)
-        product_link = getattr(args, "product_link", None)
-        product_title = getattr(args, "product_title", None)
-        if location:
-            kwargs["location"] = location
-        if product_link and product_title:
-            kwargs["product_link"] = product_link
-            kwargs["product_title"] = product_title
-
     if args.action == "login":
-        result = asyncio.run(login_action(args.platform, args.headless))
+        result = asyncio.run(login_action(args.platform))
         sys.exit(0 if result else 1)
 
     elif args.action == "verify":
@@ -379,7 +369,6 @@ def main():
             thumbnail=args.thumbnail,
             publish_date=args.publish_date,
             auto_login=not args.no_auto_login,
-            **kwargs
         ))
         sys.exit(0 if result else 1)
 
