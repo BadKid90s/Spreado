@@ -2,7 +2,9 @@ name: Release
 
 on:
   release:
-    types: [created, edited, published, prereleased]
+    # 只在 release 创建时触发一次，避免重复构建
+    # created: draft/正式 release 创建时触发
+    types: [created]
   workflow_dispatch:
     # 手动触发，支持任何分支创建 Release
     inputs:
