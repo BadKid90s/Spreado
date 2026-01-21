@@ -2,79 +2,78 @@ name: Release
 
 on:
   release:
-    # 只在 release 创建时触发一次，避免重复构建
-    # created: draft/正式 release 创建时触发
     types: [created]
   workflow_dispatch:
-    # 手动触发，支持任何分支创建 Release
     inputs:
       tag_name:
-        description: 'Tag name for the release (e.g., v1.0.0)'
+        description: 'Tag name (e.g., v1.0.0)'
         required: true
-      test_mode:
-        description: 'Test mode (skip PyPI publish)'
-        required: false
-        default: 'true'
       draft:
         description: 'Create as draft release'
         required: false
         default: 'true'
+      test_mode:
+        description: 'Test mode (skip PyPI)'
+        required: false
+        default: 'true'
 
 jobs:
+  # 1. 发布到 PyPI (仅在正式 Release 时或手动非测试模式下)
   build-pypi:
     runs-on: ubuntu-latest
-    if: github.event_name == 'release'
+    # 逻辑：如果是 release 事件，或者手动触发且 test_mode 为 false
+    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.test_mode == 'false')
     steps:
       - uses: actions/checkout@v4
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
-
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install build twine
-
+          pip install --upgrade pip build twine
       - name: Build package
         run: python -m build
-
       - name: Publish to PyPI
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: twine upload dist/*
 
-  build-binaries:
+  # 2. 标准构建 (Win x64/ARM, Linux x64/ARM, Mac x64/ARM)
+  build-standard:
+    name: Build ${{ matrix.platform }} ${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Linux
+          # Linux x64
           - os: ubuntu-latest
             platform: linux
             arch: x64
-          - os: ubuntu-latest-arm64
+          # Linux ARM
+          - os: ubuntu-24.04-arm
             platform: linux
             arch: arm64
-          # macOS
-          - os: macOS-15
+          # macOS Intel (必须用 macos-15-intel)
+          - os: macos-15
             platform: macos
             arch: x64
-          - os: mmacos-latest
+          # macOS Apple Silicon (macos-latest 是 ARM)
+          - os: macos-latest
             platform: macos
             arch: arm64
-          # Windows
+          # Windows x64
           - os: windows-latest
             platform: windows
             arch: x64
-          - os: windows-latest-arm64
+          # Windows ARM
+          - os: windows-11-arm
             platform: windows
             arch: arm64
 
-    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -93,20 +92,19 @@ jobs:
       - name: Install Playwright browsers
         run: playwright install chromium
 
-      - name: Build binary for ${{ matrix.platform }} ${{ matrix.arch }}
+      - name: Build binary
+        # 你的脚本必须能接受参数或者自动识别系统
         run: python build_binary.py
 
       - name: Strip and codesign (macOS only)
         if: runner.os == 'macOS'
         run: |
-          # Find the executable in dist folder
           EXEC_FILE=$(find dist -name "spreado" -type f | head -1)
           if [ -n "$EXEC_FILE" ]; then
             echo "Processing: $EXEC_FILE"
             strip "$EXEC_FILE" || true
             codesign --remove-signature "$EXEC_FILE" || true
             codesign --sign - "$EXEC_FILE" || true
-            echo "Done!"
           fi
 
       - name: Upload artifact
@@ -114,10 +112,12 @@ jobs:
         with:
           name: spreado-${{ matrix.platform }}-${{ matrix.arch }}
           path: dist/*.tar.gz
-          retention-days: 7
+          retention-days: 1
 
+
+  # 4. 发布 Release
   upload-release:
-    needs: build-binaries
+    needs: [build-standard]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -126,21 +126,10 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifacts
-          merge-multiple: false
+          merge-multiple: true # 自动合并所有下载的文件到同一目录，不需要手动 find
 
-      - name: List downloaded artifacts
-        run: |
-          echo "=== Downloaded artifacts ==="
-          find artifacts -type f -name "*.tar.gz" | sort
-          echo "==========================="
-
-      - name: Collect all binaries
-        run: |
-          mkdir -p release-files
-          find artifacts -type f -name "*.tar.gz" -exec cp {} release-files/ \;
-          echo "=== Files to upload ==="
-          ls -la release-files/
-          echo "======================="
+      - name: List files
+        run: ls -R artifacts
 
       - name: Get release info
         id: release_info
@@ -155,10 +144,9 @@ jobs:
 
       - name: Upload binaries to release
         uses: softprops/action-gh-release@v2
+        if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
         with:
           tag_name: ${{ steps.release_info.outputs.tag_name }}
-          files: release-files/*.tar.gz
+          files: artifacts/*.tar.gz
           draft: ${{ steps.release_info.outputs.is_draft == 'true' }}
           fail_on_unmatched_files: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
