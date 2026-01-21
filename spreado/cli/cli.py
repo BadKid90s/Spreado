@@ -88,25 +88,24 @@ async def cmd_login(args):
     """登录命令"""
     logger = get_logger("LOGIN")
 
-    platforms = list(UPLOADERS.keys())
-
-    success_count = 0
-    fail_count = 0
-
-    # 登录需要逐个执行（需要用户交互）
-    for platform in platforms:
-        print(f"\n{'=' * 50}")
-        result = await login_single_platform(platform, args, logger)
-        if result:
-            success_count += 1
-        else:
-            fail_count += 1
+    # 只登录指定的平台
+    platform = args.platform
+    platform_name = PLATFORM_NAMES.get(platform, platform)
 
     print(f"\n{'=' * 50}")
-    print(f"登录完成: 成功 {success_count} 个, 失败 {fail_count} 个")
+    print(f"登录平台: {platform_name}")
+    print(f"{'=' * 50}")
+
+    result = await login_single_platform(platform, args, logger)
+
+    print(f"\n{'=' * 50}")
+    if result:
+        print(f"✓ {platform_name} 登录成功")
+    else:
+        print(f"✗ {platform_name} 登录失败")
     print(f"{'=' * 50}\n")
 
-    return 0 if fail_count == 0 else 1
+    return 0 if result else 1
 
 
 async def verify_single_platform(platform: str, args, logger) -> bool:
