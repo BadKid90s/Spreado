@@ -1,5 +1,12 @@
 .idea
-.venv
-logs
 .vscode
+.venv
+**/logs
+**/cookies
 **/__pycache__
+
+build
+cookies
+dist
+build.spec
+spreado.egg-info

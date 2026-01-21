@@ -1,0 +1,22 @@
+include README.md
+include pyproject.toml
+include requirements.txt
+
+recursive-include spreado *.py
+recursive-include spreado *.json
+
+exclude spreado/__pycache__/*
+exclude spreado/*/__pycache__/*
+exclude spreado/*/*/__pycache__/*
+exclude spreado/.DS_Store
+exclude spreado/*/.DS_Store
+
+global-exclude *.pyc
+global-exclude *.pyo
+global-exclude *.pyd
+global-exclude .DS_Store
+global-exclude *.so
+global-exclude *.egg-info
+global-exclude *.egg-info/*
+exclude dist/*
+exclude build/*
