@@ -30,7 +30,7 @@ jobs:
           pip install ruff black
 
       - name: Run ruff linter
-        run: ruff check . --ignore F524
+        run: ruff check .
 
       - name: Run black formatter check
         run: black --check .
