@@ -105,7 +105,7 @@ class BaseUploader(ABC):
             async with await StealthBrowser.create(headless=False) as browser:
                 page = await browser.new_page()
                 await page.goto(self.login_url)
-                self.logger.info(f"[+] 已打开登录页面，请在浏览器中完成登录操作")
+                self.logger.info("[+] 已打开登录页面，请在浏览器中完成登录操作")
                 # 1. 直接等待目标 URL 出现
                 await page.wait_for_url(
                     url=self.login_success_url,
@@ -183,7 +183,7 @@ class BaseUploader(ABC):
             async with await StealthBrowser.create(headless=True) as browser:
                 await browser.load_cookies_from_file(self.cookie_file_path)
                 async with await browser.new_page() as page:
-                    self.logger.info(f"[-] 正在打开上传页面...")
+                    self.logger.info("[-] 正在打开上传页面...")
                     await page.goto(self.upload_url)
 
                     result = await self._upload_video(
@@ -269,11 +269,11 @@ class BaseUploader(ABC):
 
             async with await StealthBrowser.create(headless=True) as browser:
                 await browser.load_cookies_from_file(self.cookie_file_path)
-                self.logger.info(f"[+] 检查页面是否包含登录页元素")
+                self.logger.info("[+] 检查页面是否包含登录页元素")
                 async with await browser.new_page() as page:
-                    self.logger.info(f"[+] 打开上传页面，等待是否跳转到登录页")
+                    self.logger.info("[+] 打开上传页面，等待是否跳转到登录页")
                     await page.goto(self.upload_url, timeout=30000)
-                    self.logger.info(f"[+] 检查页面是否包含登录页元素")
+                    self.logger.info("[+] 检查页面是否包含登录页元素")
                     login_required = await self._check_login_required(page)
                     if login_required:
                         self.logger.warning("[!] Cookie已失效")

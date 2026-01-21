@@ -24,7 +24,6 @@ import subprocess
 import platform
 import argparse
 from pathlib import Path
-from datetime import datetime
 
 
 APP_NAME = "spreado"
@@ -102,7 +101,7 @@ def build_specific_platform(platform_name, arch, output_dir=None, onefile=True):
 
     if (platform_name, arch) != (current_system, current_arch):
         print(f"\n⚠ 跳过跨平台构建: 不能在 {current_system}-{current_arch} 上构建 {platform_name}-{arch}")
-        print(f"   请在目标平台上运行此脚本")
+        print("   请在目标平台上运行此脚本")
         return None
 
     if output_dir is None:
@@ -159,25 +158,25 @@ def build_specific_platform(platform_name, arch, output_dir=None, onefile=True):
                 break
 
     if not copied:
-        print(f"\n✗ 错误: 找不到可执行文件")
+        print("\n✗ 错误: 找不到可执行文件")
         return False
 
     readme_path = temp_dir / "README.txt"
     if Path("dist/README.txt").exists():
         shutil.copy2("dist/README.txt", readme_path)
-        print(f"  复制: README.txt")
+        print("  复制: README.txt")
 
     if platform.system() == "Windows":
         install_script = temp_dir / "install_browser.bat"
         if Path("dist/install_browser.bat").exists():
             shutil.copy2("dist/install_browser.bat", install_script)
-            print(f"  复制: install_browser.bat")
+            print("  复制: install_browser.bat")
     else:
         install_script = temp_dir / "install_browser.sh"
         if Path("dist/install_browser.sh").exists():
             shutil.copy2("dist/install_browser.sh", install_script)
             os.chmod(install_script, 0o755)
-            print(f"  复制: install_browser.sh")
+            print("  复制: install_browser.sh")
 
     archive_path = output_dir / f"{pkg_name}.tar.gz"
     with tarfile.open(archive_path, "w:gz") as tar:
@@ -195,7 +194,6 @@ def build_specific_platform(platform_name, arch, output_dir=None, onefile=True):
 def build_current_platform():
     """构建当前平台的二进制文件"""
     system, machine, exe_ext = get_platform_info()
-    platform_name = f"{system}-{machine}"
     return build_specific_platform(system, machine)
 
 
@@ -219,7 +217,7 @@ def build_all_platforms():
             results.append((platform_name, arch, None))
 
     print(f"\n{'='*60}")
-    print(f"  构建汇总")
+    print("  构建汇总")
     print(f"{'='*60}")
 
     skipped = sum(1 for r in results if r[2] is None)
@@ -236,7 +234,7 @@ def build_all_platforms():
 
     print(f"\n  总计: {succeeded} 成功, {failed} 失败, {skipped} 跳过")
     print(f"\n  提示: 在 {platform.system()}-{platform.machine()} 上只能构建当前平台的二进制文件")
-    print(f"        如需构建其他平台，请在对应操作系统上运行此脚本")
+    print("        如需构建其他平台，请在对应操作系统上运行此脚本")
 
     return succeeded > 0 and failed == 0
 
@@ -244,7 +242,7 @@ def build_all_platforms():
 def upload_to_pypi(test=True):
     """上传到 PyPI"""
     print(f"\n{'='*60}")
-    print(f"  准备上传到 PyPI")
+    print("  准备上传到 PyPI")
     print(f"{'='*60}")
 
     if test:
@@ -260,9 +258,9 @@ def upload_to_pypi(test=True):
     result = subprocess.run(pypi_cmd)
 
     if result.returncode == 0:
-        print(f"\n✓ 上传成功!")
+        print("\n✓ 上传成功!")
     else:
-        print(f"\n✗ 上传失败")
+        print("\n✗ 上传失败")
 
     return result.returncode == 0
 
@@ -270,19 +268,19 @@ def upload_to_pypi(test=True):
 def create_wheels_for_pypi():
     """为 PyPI 创建 wheel 文件"""
     print(f"\n{'='*60}")
-    print(f"  创建 Python Wheel 文件")
+    print("  创建 Python Wheel 文件")
     print(f"{'='*60}")
 
     build_cmd = [sys.executable, "-m", "build", "--wheel"]
     result = subprocess.run(build_cmd)
 
     if result.returncode == 0:
-        print(f"\n✓ Wheel 文件创建成功")
+        print("\n✓ Wheel 文件创建成功")
         dist_path = Path("dist")
         for wheel_file in dist_path.glob("*.whl"):
             print(f"  {wheel_file.name}")
     else:
-        print(f"\n✗ Wheel 文件创建失败")
+        print("\n✗ Wheel 文件创建失败")
 
     return result.returncode == 0
 
@@ -320,7 +318,7 @@ def main():
 
     if args.clean:
         clean_build_dirs()
-        print(f"\n✓ 清理完成")
+        print("\n✓ 清理完成")
         return 0
 
     if args.wheels:

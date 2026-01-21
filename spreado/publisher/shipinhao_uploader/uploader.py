@@ -90,14 +90,14 @@ class ShiPinHaoUploader(BaseUploader):
         try:
 
             await page.goto(self.upload_url)
-            self.logger.info(f"[-] 正在打开上传页面...")
+            self.logger.info("[-] 正在打开上传页面...")
             await page.wait_for_url(self.upload_url)
 
             # 等待发布界面的加载元素隐藏（隐藏说明加载成功）
-            self.logger.info(f"[-] 正在等待发布界面加载完成...")
+            self.logger.info("[-] 正在等待发布界面加载完成...")
             loading_element = page.locator('.finder-page.PostCreate #container-wrap div.wrap')
             await loading_element.wait_for(state='hidden', timeout=30000)
-            self.logger.info(f"[-] 发布界面已加载完成")
+            self.logger.info("[-] 发布界面已加载完成")
 
             self.logger.info(f"[+] 正在处理视频: {title}")
             
@@ -208,7 +208,7 @@ class ShiPinHaoUploader(BaseUploader):
                 self.logger.warning(f"[!] 选择器 {selector} 查找失败: {e}")
                 continue
         
-        self.logger.error(f"[!] 选择器查找失败，无法上传视频文件")
+        self.logger.error("[!] 选择器查找失败，无法上传视频文件")
         return False
 
     async def _fill_video_info(self, page: Page, title: str = "", content: str = "", tags: List[str] = None) -> bool:

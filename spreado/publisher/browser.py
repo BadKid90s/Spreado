@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Optional
 
 import json
-from playwright.async_api import async_playwright, Page, BrowserContext, Browser, Playwright, Cookie
+from playwright.async_api import async_playwright, Page, BrowserContext, Browser, Playwright
 from playwright_stealth import Stealth
 
 

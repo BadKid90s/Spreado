@@ -74,7 +74,7 @@ class XiaoHongShuUploader(BaseUploader):
         try:
             self.logger.debug(f"[DEBUG] 页面初始化完成: {time.time() - start_time:.2f}秒")
 
-            self.logger.info(f"[-] 正在打开上传页面...")
+            self.logger.info("[-] 正在打开上传页面...")
             await page.goto(self.upload_url)
             try:
                 await page.wait_for_url(self.upload_url, timeout=5000)
@@ -221,7 +221,7 @@ class XiaoHongShuUploader(BaseUploader):
                     for selector in info_selectors:
                         if await page.locator(selector).count() > 0:
                             if await page.locator(selector).first.is_visible():
-                                self.logger.info(f"[+] 检测到视频信息编辑区域，认为上传完成")
+                                self.logger.info("[+] 检测到视频信息编辑区域，认为上传完成")
                                 return True
 
                 # 如果没有找到任何完成标志，继续等待
@@ -396,7 +396,7 @@ class XiaoHongShuUploader(BaseUploader):
             finish_element = await self._find_first_element(page, finish_selectors)
             # 点击完成按钮
             await finish_element.click(force=True, timeout=3000)
-            self.logger.info(f"[+] 已点击完成按钮")
+            self.logger.info("[+] 已点击完成按钮")
             self.logger.info("[+] 封面设置完成")
             self.logger.debug(f"[DEBUG] _set_thumbnail 总耗时: {time.time() - start_time:.2f}秒")
             return True

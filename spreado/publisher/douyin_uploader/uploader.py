@@ -70,7 +70,7 @@ class DouYinUploader(BaseUploader):
         try:
 
             await page.goto(self.upload_url)
-            self.logger.info(f"[-] 正在打开上传页面...")
+            self.logger.info("[-] 正在打开上传页面...")
             await page.wait_for_url(self.upload_url)
 
             self.logger.info(f"[+] 正在上传视频: {title}")
@@ -201,7 +201,7 @@ class DouYinUploader(BaseUploader):
                     for selector in info_selectors:
                         if await page.locator(selector).count() > 0:
                             if await page.locator(selector).first.is_visible():
-                                self.logger.info(f"[+] 检测到视频信息编辑区域，认为上传完成")
+                                self.logger.info("[+] 检测到视频信息编辑区域，认为上传完成")
                                 return True
 
                 # 如果没有找到任何完成标志，继续等待
