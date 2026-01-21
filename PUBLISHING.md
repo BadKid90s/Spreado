@@ -200,10 +200,14 @@ python build_binary.py --release
 
 ### 更新版本号
 
-编辑 `spreado/__version__.py`：
+编辑 `pyproject.toml`：
 
-```python
-__version__ = '1.0.0'  # 更新版本号
+```toml
+[project]
+version = "1.0.0"  # 更新版本号
+authors = [
+    { name = "Your Name", email = "your.email@example.com" }
+]
 ```
 
 ### 版本号规范
@@ -220,10 +224,10 @@ __version__ = '1.0.0'  # 更新版本号
 
 ```bash
 # 1. 更新版本号
-vim spreado/__version__.py
+vim pyproject.toml
 
 # 2. 提交更改
-git add spreado/__version__.py
+git add pyproject.toml
 git commit -m "Bump version to 1.0.0"
 
 # 3. 创建 tag
@@ -272,7 +276,6 @@ spreado-project/
 ├── spreado/              # 主包目录
 │   ├── __init__.py
 │   ├── __main__.py
-│   ├── __version__.py
 │   ├── conf.py           # 配置文件
 │   ├── cli/
 │   │   └── cli.py        # CLI 命令行实现
@@ -286,7 +289,7 @@ spreado-project/
 │   └── utils/            # 工具模块
 │       ├── log.py
 │       └── files_times.py
-├── pyproject.toml        # 项目配置
+├── pyproject.toml        # 项目配置（包含版本、作者信息）
 ├── setup.py              # 兼容配置
 ├── MANIFEST.in           # 打包清单
 ├── README.md             # 说明文档
@@ -318,7 +321,7 @@ PyPI 不允许重复上传相同版本号。
 
 ```bash
 # 更新版本号
-vim spreado/__version__.py
+vim pyproject.toml
 
 # 重新构建并上传
 rm -rf dist/

@@ -25,8 +25,9 @@ import platform
 import argparse
 from pathlib import Path
 
+from spreado import __version__
+
 APP_NAME = "spreado"
-VERSION_FILE = Path("spreado/__version__.py")
 
 
 def get_playwright_browser_path():
@@ -104,12 +105,7 @@ def copy_chromium_to_package(temp_dir: Path):
 
 def get_version():
     """Get version number"""
-    if VERSION_FILE.exists():
-        content = VERSION_FILE.read_text(encoding="utf-8")
-        for line in content.split("\n"):
-            if "__version__" in line and "=" in line:
-                return line.split("=", 1)[1].strip().strip("\"'")
-    return "1.0.0"
+    return __version__
 
 
 def get_platform_info():

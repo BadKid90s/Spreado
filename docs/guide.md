@@ -22,7 +22,6 @@ spreado/
 ├── spreado/                     # 主包目录
 │   ├── __init__.py              # 包初始化
 │   ├── __main__.py              # 入口点
-│   ├── __version__.py           # 版本信息
 │   ├── conf.py                  # 项目配置文件
 │   ├── cli/                     # CLI 命令行工具
 │   │   ├── __init__.py
@@ -44,7 +43,7 @@ spreado/
 │   ├── core_flow.md             # 核心流程文档
 │   ├── guide.md                 # 开发指南（本文档）
 │   └── login_flow.md            # 登录流程文档
-├── pyproject.toml               # 项目配置
+├── pyproject.toml               # 项目配置（包含版本、作者信息）
 ├── setup.py                     # 兼容配置
 ├── MANIFEST.in                  # 打包清单
 ├── requirements.txt             # 依赖列表

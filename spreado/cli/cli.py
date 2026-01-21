@@ -16,17 +16,21 @@ from ..publisher.xiaohongshu_uploader.uploader import XiaoHongShuUploader
 from ..publisher.kuaishou_uploader.uploader import KuaiShouUploader
 from ..publisher.shipinhao_uploader.uploader import ShiPinHaoUploader
 from ..utils import get_logger
-
-from ..__version__ import __logo__, __version__, __author__, __email__
+from .. import __version__, __author__, __email__
 
 # Logo
 LOGO = r"""
-{}
+   _____ _____  _____  ______          _____   ____
+  / ____|  __ \|  __ \|  ____|   /\   |  __ \ / __ \
+ | (___ | |__) | |__) | |__     /  \  | |  | | |  | |
+  \___ \|  ___/|  _  /|  __|   / /\ \ | |  | | |  | |
+  ____) | |    | | \ \| |____ / ____ \| |__| | |__| |
+ |_____/|_|    |_|  \_\______/_/    \_\_____/ \____/
 
            全平台内容发布工具 v{}
            作者: {}
            邮箱: {}
-""".format(__logo__, __version__, __author__, __email__)
+""".format(__version__, __author__, __email__)
 
 # 平台映射
 UPLOADERS: Dict[str, Type] = {
