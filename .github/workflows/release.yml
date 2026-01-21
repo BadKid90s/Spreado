@@ -57,8 +57,8 @@ jobs:
           - os: ubuntu-24.04-arm
             platform: linux
             arch: arm64
-          # macOS Intel (必须用 macos-15-intel)
-          - os: macos-15
+          # macOS Intel
+          - os: macos-15-intel
             platform: macos
             arch: x64
           # macOS Apple Silicon (macos-latest 是 ARM)
