@@ -5,6 +5,10 @@ on:
     types: [created]
   workflow_dispatch:
     # 手动触发测试分支的打包功能
+    branches:
+      - ci-test
+      - main
+      - master
     inputs:
       test_mode:
         description: 'Test mode (skip PyPI publish)'
