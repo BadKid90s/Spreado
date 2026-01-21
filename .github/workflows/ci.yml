@@ -1,15 +1,22 @@
 name: CI
 
 on:
+  # 1. Push: 推送代码到【任何分支】时触发
   push:
-    branches: [main, master, ci-test]
+    # 移除 branches 字段，代表监听所有分支
     paths-ignore:
       - '**.md'
       - 'docs/**'
       - '.gitignore'
       - 'LICENSE'
+
+  # 2. Pull Request: 针对【任何分支】发起合并请求时触发
   pull_request:
-    branches: [main, master]
+    branches:
+      - main
+      - master
+
+  # 3. 手动触发 (支持在界面选择任何分支运行)
   workflow_dispatch:
 
 jobs:
