@@ -45,25 +45,39 @@ def get_platform_info():
     machine = platform.machine().lower()
 
     if system == "windows":
-        return "windows", "x64", ".exe"
+        # Windows ARM64 detection
+        if machine in ("arm64", "aarch64"):
+            return "windows", "arm64", ".exe"
+        else:
+            return "windows", "x64", ".exe"
     elif system == "darwin":
         if machine == "arm64":
             return "macos", "arm64", ""
         else:
             return "macos", "x64", ""
     else:
-        if machine == "aarch64":
+        # Linux
+        if machine in ("aarch64", "arm64"):
             return "linux", "arm64", ""
         else:
             return "linux", "x64", ""
 
 
 PLATFORM_MAP = {
+    # Windows
     ("windows", "x64"): ("windows", "x64", ".exe"),
+    ("windows", "amd64"): ("windows", "x64", ".exe"),
+    ("windows", "arm64"): ("windows", "arm64", ".exe"),
+    ("windows", "aarch64"): ("windows", "arm64", ".exe"),
+    # macOS
     ("darwin", "x64"): ("macos", "x64", ""),
+    ("darwin", "x86_64"): ("macos", "x64", ""),
     ("darwin", "arm64"): ("macos", "arm64", ""),
+    # Linux
     ("linux", "x64"): ("linux", "x64", ""),
+    ("linux", "x86_64"): ("linux", "x64", ""),
     ("linux", "aarch64"): ("linux", "arm64", ""),
+    ("linux", "arm64"): ("linux", "arm64", ""),
 }
 
 
@@ -233,6 +247,7 @@ def build_all_platforms():
     """Build binaries for all platforms"""
     platforms = [
         ("windows", "x64"),
+        ("windows", "arm64"),
         ("macos", "x64"),
         ("macos", "arm64"),
         ("linux", "x64"),
