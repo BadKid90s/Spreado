@@ -2,16 +2,16 @@ name: Release
 
 on:
   release:
-    types: [created]
+    types: [created, edited, published, prereleased]
   workflow_dispatch:
-    # 手动触发测试分支的打包功能
-    branches:
-      - ci-test
-      - main
-      - master
+    # 手动触发，支持任何分支创建 Release
     inputs:
       test_mode:
         description: 'Test mode (skip PyPI publish)'
+        required: false
+        default: 'true'
+      draft:
+        description: 'Create as draft release'
         required: false
         default: 'true'
 
@@ -69,6 +69,7 @@ jobs:
         with:
           files: dist/*.tar.gz
           generate-release-notes: true
+          draft: ${{ inputs.draft == 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -100,6 +101,7 @@ jobs:
         with:
           files: dist/*.tar.gz
           generate-release-notes: true
+          draft: ${{ inputs.draft == 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -131,6 +133,7 @@ jobs:
         with:
           files: dist/*.tar.gz
           generate-release-notes: true
+          draft: ${{ inputs.draft == 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -162,5 +165,6 @@ jobs:
         with:
           files: dist/*.tar.gz
           generate-release-notes: true
+          draft: ${{ inputs.draft == 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
