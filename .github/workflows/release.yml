@@ -6,6 +6,9 @@ on:
   workflow_dispatch:
     # 手动触发，支持任何分支创建 Release
     inputs:
+      tag_name:
+        description: 'Tag name for the release (e.g., v1.0.0)'
+        required: true
       test_mode:
         description: 'Test mode (skip PyPI publish)'
         required: false
@@ -18,7 +21,7 @@ on:
 jobs:
   build-pypi:
     runs-on: ubuntu-latest
-    if: github.event_name != 'workflow_dispatch'
+    if: github.event_name == 'release'
     steps:
       - uses: actions/checkout@v4
 
@@ -41,130 +44,96 @@ jobs:
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
 
-  build-linux:
+  build-binaries:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+          - os: macos-latest
+            platform: macos
+            arch: x64
+          - os: macos-14
+            platform: macos
+            arch: arm64
+          - os: windows-latest
+            platform: windows
+            arch: x64
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pyinstaller
+
+      - name: Install Playwright browsers
+        run: playwright install chromium
+
+      - name: Build binary for ${{ matrix.platform }} ${{ matrix.arch }}
+        run: python build_binary.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: spreado-${{ matrix.platform }}-${{ matrix.arch }}
+          path: dist/*.tar.gz
+          retention-days: 7
+
+  upload-release:
+    needs: build-binaries
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
         with:
-          python-version: '3.11'
-          cache: 'pip'
+          path: artifacts
+          merge-multiple: false
 
-      - name: Install dependencies
+      - name: List downloaded artifacts
         run: |
-          python -m pip install --upgrade pip
-          pip install -e .
-          pip install pyinstaller
+          echo "=== Downloaded artifacts ==="
+          find artifacts -type f -name "*.tar.gz" | sort
+          echo "==========================="
 
-      - name: Install Playwright browsers
-        run: playwright install chromium
+      - name: Collect all binaries
+        run: |
+          mkdir -p release-files
+          find artifacts -type f -name "*.tar.gz" -exec cp {} release-files/ \;
+          echo "=== Files to upload ==="
+          ls -la release-files/
+          echo "======================="
 
-      - name: Build binary for Linux x64
-        run: python build_binary.py
+      - name: Get release info
+        id: release_info
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag_name=${{ inputs.tag_name }}" >> $GITHUB_OUTPUT
+            echo "is_draft=${{ inputs.draft == 'true' }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag_name=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+            echo "is_draft=${{ github.event.release.draft }}" >> $GITHUB_OUTPUT
+          fi
 
-      - name: Upload binary to release
+      - name: Upload binaries to release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.tar.gz
-          generate-release-notes: true
-          draft: ${{ inputs.draft == 'true' }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-macos-x64:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e .
-          pip install pyinstaller
-
-      - name: Install Playwright browsers
-        run: playwright install chromium
-
-      - name: Build binary for macOS x64
-        run: python build_binary.py
-
-      - name: Upload binary to release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/*.tar.gz
-          generate-release-notes: true
-          draft: ${{ inputs.draft == 'true' }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-macos-arm64:
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e .
-          pip install pyinstaller
-
-      - name: Install Playwright browsers
-        run: playwright install chromium
-
-      - name: Build binary for macOS arm64
-        run: python build_binary.py
-
-      - name: Upload binary to release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/*.tar.gz
-          generate-release-notes: true
-          draft: ${{ inputs.draft == 'true' }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e .
-          pip install pyinstaller
-
-      - name: Install Playwright browsers
-        run: playwright install chromium
-
-      - name: Build binary for Windows
-        run: python build_binary.py
-
-      - name: Upload binary to release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/*.tar.gz
-          generate-release-notes: true
-          draft: ${{ inputs.draft == 'true' }}
+          tag_name: ${{ steps.release_info.outputs.tag_name }}
+          files: release-files/*.tar.gz
+          draft: ${{ steps.release_info.outputs.is_draft == 'true' }}
+          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
