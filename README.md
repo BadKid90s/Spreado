@@ -15,7 +15,7 @@
 
 - Python 3.8 或更高版本
 - 操作系统：Windows, macOS, Linux
-- 浏览器：需要安装 Playwright Chromium（安装后自动下载）
+- 浏览器：自动检测系统已安装的 Chrome/Edge，或使用 Playwright Chromium
 
 ## 📦 安装指南
 
@@ -24,16 +24,15 @@
 ```bash
 # 安装最新版本
 pip install spreado
-
-# 安装 Playwright 浏览器（只需执行一次）
-playwright install chromium
 ```
+
+> 💡 **无需单独安装浏览器！** Spreado 会自动检测系统已安装的 Chrome 或 Edge 浏览器。如果未检测到，会使用 Playwright 内置的 Chromium。
 
 ### 方式二：从源码安装
 
 ```bash
 # 克隆项目
-git clone https://github.com/yourname/spreado.git
+git clone https://github.com/BadKid90s/spreado.git
 cd spreado
 
 # 创建虚拟环境（推荐）
@@ -44,9 +43,6 @@ source .venv/bin/activate  # Linux/macOS
 
 # 安装依赖
 pip install -r requirements.txt
-
-# 安装 Playwright 浏览器
-playwright install chromium
 ```
 
 ## 🔧 快速开始
@@ -185,13 +181,59 @@ if __name__ == "__main__":
     asyncio.run(upload_video())
 ```
 
+## 🌐 浏览器配置
+
+Spreado 支持多种浏览器选项，按以下优先级自动选择：
+
+1. **自动检测系统浏览器**（默认）- 自动查找已安装的 Chrome/Edge
+2. **环境变量指定** - 手动配置浏览器
+3. **Playwright Chromium** - 作为后备选项
+
+### 自动检测
+
+无需任何配置，Spreado 会自动检测以下浏览器：
+
+| 平台 | 检测的浏览器 |
+|-----|------------|
+| Windows | Chrome, Edge |
+| macOS | Chrome, Edge, Chromium |
+| Linux | google-chrome, chromium, edge |
+
+### 手动指定浏览器
+
+如需手动指定浏览器，可设置环境变量：
+
+```bash
+# 使用系统 Chrome
+export SPREADO_BROWSER_CHANNEL=chrome
+
+# 或使用 Edge
+export SPREADO_BROWSER_CHANNEL=msedge
+
+# 或指定浏览器路径
+export SPREADO_BROWSER_PATH="/path/to/chrome"
+```
+
+### 使用 Playwright Chromium
+
+如果系统没有安装浏览器，可手动安装 Playwright Chromium：
+
+```bash
+playwright install chromium
+```
+
 ## 🛠️ 故障排除
 
 ### 常见问题
 
 1. **提示找不到浏览器？**
+   
+   Spreado 会自动检测系统 Chrome/Edge。如果检测不到，可以：
    ```bash
-   # 安装 Playwright Chromium 浏览器
+   # 方式1：手动指定浏览器路径
+   export SPREADO_BROWSER_PATH="/path/to/chrome"
+   
+   # 方式2：安装 Playwright Chromium
    playwright install chromium
    ```
 
@@ -222,8 +264,8 @@ if __name__ == "__main__":
 ### 调试技巧
 
 - 使用 `--debug` 参数查看详细日志和错误信息
+- 查看终端输出的 `[Browser] Using: ...` 信息确认使用的浏览器
 - 查看终端输出的错误信息
-- 确保已执行 `playwright install chromium` 安装浏览器
 
 ## 📦 打包为可执行文件
 
