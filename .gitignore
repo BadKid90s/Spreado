@@ -1,6 +1,8 @@
 .idea
 .vscode
 .venv
+.ruff_cache
+**/.DS_Store
 **/logs
 **/cookies
 **/__pycache__

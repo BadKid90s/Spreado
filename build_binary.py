@@ -1,19 +1,19 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Spreado 二进制分发构建脚本
+Spreado Binary Build Script
 
-为不同平台构建预编译的二进制可执行文件。
+Build pre-compiled binary executables for different platforms.
 
-支持以下平台:
+Supported platforms:
 - Windows (x64)
 - macOS (x64, arm64)
 - Linux (x64, arm64)
 
-使用方法:
-    python build_binary.py                    # 构建当前平台
-    python build_binary.py --all              # 构建所有平台
-    python build_binary.py --upload           # 构建并上传到 PyPI
+Usage:
+    python build_binary.py                    # Build for current platform
+    python build_binary.py --all              # Build for all platforms
+    python build_binary.py --upload           # Build and upload to PyPI
 """
 
 import os
@@ -24,15 +24,86 @@ import subprocess
 import platform
 import argparse
 from pathlib import Path
-from datetime import datetime
-
 
 APP_NAME = "spreado"
 VERSION_FILE = Path("spreado/__version__.py")
 
 
+def get_playwright_browser_path():
+    """Get Playwright browser installation path"""
+    system = platform.system().lower()
+
+    if system == "windows":
+        base_path = (
+            Path(os.environ.get("USERPROFILE", ""))
+            / "AppData"
+            / "Local"
+            / "ms-playwright"
+        )
+    elif system == "darwin":
+        base_path = Path.home() / "Library" / "Caches" / "ms-playwright"
+    else:
+        base_path = Path.home() / ".cache" / "ms-playwright"
+
+    return base_path
+
+
+def find_chromium_path():
+    """Find Chromium browser path in Playwright installation"""
+    browser_path = get_playwright_browser_path()
+
+    if not browser_path.exists():
+        print(f"  [!] Playwright browser path not found: {browser_path}")
+        return None
+
+    # Find chromium directory (e.g., chromium-1140, chromium-1148)
+    chromium_dirs = list(browser_path.glob("chromium-*"))
+    if not chromium_dirs:
+        print(f"  [!] No Chromium installation found in: {browser_path}")
+        return None
+
+    # Use the latest version
+    chromium_dir = sorted(chromium_dirs)[-1]
+    print(f"  Found Chromium: {chromium_dir.name}")
+
+    return chromium_dir
+
+
+def copy_chromium_to_package(temp_dir: Path):
+    """Copy Chromium browser to package directory"""
+    chromium_path = find_chromium_path()
+
+    if not chromium_path:
+        print("  [!] Chromium not found, skipping browser bundling")
+        return False
+
+    # Create browser directory in package
+    browser_dest = temp_dir / "browser"
+    browser_dest.mkdir(parents=True, exist_ok=True)
+
+    print("  Copying Chromium browser (this may take a while)...")
+
+    try:
+        # Copy entire chromium directory
+        shutil.copytree(chromium_path, browser_dest / chromium_path.name)
+
+        # Get size
+        total_size = sum(
+            f.stat().st_size
+            for f in (browser_dest / chromium_path.name).rglob("*")
+            if f.is_file()
+        )
+        size_mb = total_size / (1024 * 1024)
+        print(f"  Copied Chromium browser: {size_mb:.1f} MB")
+
+        return True
+    except Exception as e:
+        print(f"  [!] Failed to copy Chromium: {e}")
+        return False
+
+
 def get_version():
-    """获取版本号"""
+    """Get version number"""
     if VERSION_FILE.exists():
         content = VERSION_FILE.read_text(encoding="utf-8")
         for line in content.split("\n"):
@@ -42,35 +113,49 @@ def get_version():
 
 
 def get_platform_info():
-    """获取当前平台信息"""
+    """Get current platform info"""
     system = platform.system().lower()
     machine = platform.machine().lower()
 
     if system == "windows":
-        return "windows", "x64", ".exe"
+        # Windows ARM64 detection
+        if machine in ("arm64", "aarch64"):
+            return "windows", "arm64", ".exe"
+        else:
+            return "windows", "x64", ".exe"
     elif system == "darwin":
         if machine == "arm64":
             return "macos", "arm64", ""
         else:
             return "macos", "x64", ""
     else:
-        if machine == "aarch64":
+        # Linux
+        if machine in ("aarch64", "arm64"):
             return "linux", "arm64", ""
         else:
             return "linux", "x64", ""
 
 
 PLATFORM_MAP = {
+    # Windows
     ("windows", "x64"): ("windows", "x64", ".exe"),
+    ("windows", "amd64"): ("windows", "x64", ".exe"),
+    ("windows", "arm64"): ("windows", "arm64", ".exe"),
+    ("windows", "aarch64"): ("windows", "arm64", ".exe"),
+    # macOS
     ("darwin", "x64"): ("macos", "x64", ""),
+    ("darwin", "x86_64"): ("macos", "x64", ""),
     ("darwin", "arm64"): ("macos", "arm64", ""),
+    # Linux
     ("linux", "x64"): ("linux", "x64", ""),
+    ("linux", "x86_64"): ("linux", "x64", ""),
     ("linux", "aarch64"): ("linux", "arm64", ""),
+    ("linux", "arm64"): ("linux", "arm64", ""),
 }
 
 
 def get_current_build_target():
-    """获取当前平台作为构建目标"""
+    """Get current platform as build target"""
     system = platform.system().lower()
     machine = platform.machine().lower()
 
@@ -84,25 +169,27 @@ def get_current_build_target():
 
 
 def clean_build_dirs():
-    """清理构建目录"""
+    """Clean build directories"""
     dirs_to_clean = ["build", "dist", "__pycache__"]
     for dir_name in dirs_to_clean:
         if Path(dir_name).exists():
             shutil.rmtree(dir_name)
-            print(f"  已清理: {dir_name}/")
+            print(f"  Cleaned: {dir_name}/")
 
     for spec_file in Path(".").glob("*.spec"):
         spec_file.unlink()
-        print(f"  已清理: {spec_file.name}")
+        print(f"  Cleaned: {spec_file.name}")
 
 
 def build_specific_platform(platform_name, arch, output_dir=None, onefile=True):
-    """为特定平台构建二进制文件"""
+    """Build binary for specific platform"""
     current_system, current_arch, current_ext = get_platform_info()
 
     if (platform_name, arch) != (current_system, current_arch):
-        print(f"\n⚠ 跳过跨平台构建: 不能在 {current_system}-{current_arch} 上构建 {platform_name}-{arch}")
-        print(f"   请在目标平台上运行此脚本")
+        print(
+            f"\n[!] Skip cross-platform build: cannot build {platform_name}-{arch} on {current_system}-{current_arch}"
+        )
+        print("    Please run this script on the target platform")
         return None
 
     if output_dir is None:
@@ -112,25 +199,50 @@ def build_specific_platform(platform_name, arch, output_dir=None, onefile=True):
     temp_dir = Path(f"build/{pkg_name}")
 
     print(f"\n{'='*60}")
-    print(f"  正在构建: {platform_name} ({arch})")
+    print(f"  Building: {platform_name} ({arch})")
     print(f"{'='*60}")
 
     clean_build_dirs()
 
+    # Use PyInstaller directly
+    entry_point = "spreado/__main__.py"
+
     build_cmd = [
-        sys.executable, "build.py",
-        "--no-archive",
+        sys.executable,
+        "-m",
+        "PyInstaller",
+        "--name",
+        APP_NAME,
+        "--onefile" if onefile else "--onedir",
+        "--clean",
+        "--noconfirm",
+        # Collect playwright related data
+        "--collect-all",
+        "playwright",
+        "--collect-all",
+        "playwright_stealth",
+        # Hidden imports
+        "--hidden-import",
+        "spreado.cli.cli",
+        "--hidden-import",
+        "spreado.publisher",
+        "--hidden-import",
+        "spreado.publisher.douyin_uploader",
+        "--hidden-import",
+        "spreado.publisher.xiaohongshu_uploader",
+        "--hidden-import",
+        "spreado.publisher.kuaishou_uploader",
+        "--hidden-import",
+        "spreado.publisher.shipinhao_uploader",
+        entry_point,
     ]
 
-    if not onefile:
-        build_cmd.append("--dir")
-
-    print(f"\n执行构建命令: {' '.join(build_cmd)}")
+    print(f"\nExecuting build command: {' '.join(build_cmd)}")
 
     result = subprocess.run(build_cmd, capture_output=False)
 
     if result.returncode != 0:
-        print(f"\n✗ 构建失败: {platform_name} ({arch})")
+        print(f"\n[X] Build failed: {platform_name} ({arch})")
         return False
 
     temp_dir.mkdir(parents=True, exist_ok=True)
@@ -143,8 +255,9 @@ def build_specific_platform(platform_name, arch, output_dir=None, onefile=True):
         if item.is_file() and (item.name == exe_name or item.suffix == ".exe"):
             dest_path = temp_dir / exe_name
             shutil.copy2(item, dest_path)
-            print(f"  复制: {item.name} -> {dest_path.name}")
-            os.chmod(dest_path, 0o755)
+            print(f"  Copied: {item.name} -> {dest_path.name}")
+            if current_ext != ".exe":
+                os.chmod(dest_path, 0o755)
             copied = True
             break
 
@@ -153,56 +266,154 @@ def build_specific_platform(platform_name, arch, output_dir=None, onefile=True):
             if item.is_file() and item.name.startswith(APP_NAME) and not item.suffix:
                 dest_path = temp_dir / exe_name
                 shutil.copy2(item, dest_path)
-                print(f"  复制: {item.name} -> {dest_path.name}")
+                print(f"  Copied: {item.name} -> {dest_path.name}")
                 os.chmod(dest_path, 0o755)
                 copied = True
                 break
 
     if not copied:
-        print(f"\n✗ 错误: 找不到可执行文件")
+        print("\n[X] Error: Executable not found")
         return False
 
-    readme_path = temp_dir / "README.txt"
-    if Path("dist/README.txt").exists():
-        shutil.copy2("dist/README.txt", readme_path)
-        print(f"  复制: README.txt")
+    # Copy Chromium browser to package
+    print("\n  Bundling Chromium browser...")
+    browser_bundled = copy_chromium_to_package(temp_dir)
 
-    if platform.system() == "Windows":
-        install_script = temp_dir / "install_browser.bat"
-        if Path("dist/install_browser.bat").exists():
-            shutil.copy2("dist/install_browser.bat", install_script)
-            print(f"  复制: install_browser.bat")
+    # Create README.txt
+    if browser_bundled:
+        readme_content = f"""Spreado v{get_version()} - {platform_name} ({arch})
+
+=== Browser Auto-Detection ===
+
+Spreado automatically detects installed Chrome/Edge browsers.
+Just run the executable directly:
+
+  Linux/macOS:  ./spreado --help
+  Windows:      spreado.exe --help
+
+The program will show which browser is being used:
+  [Browser] Using: auto-detected: /usr/bin/google-chrome
+
+
+=== Option 1: Use bundled Chromium ===
+
+Chromium browser is bundled in the 'browser' folder.
+Use the run script to use the bundled browser:
+
+  Linux/macOS:  ./run.sh --help
+  Windows:      run.bat --help
+
+
+=== Option 2: Manual browser configuration ===
+
+If auto-detection doesn't work, you can manually specify:
+
+  # Use system Chrome
+  export SPREADO_BROWSER_CHANNEL=chrome
+
+  # Or use Edge
+  export SPREADO_BROWSER_CHANNEL=msedge
+
+  # Or specify browser path directly
+  export SPREADO_BROWSER_PATH="/path/to/chrome"
+
+
+For more info: https://github.com/BadKid90s/Spreado
+"""
     else:
-        install_script = temp_dir / "install_browser.sh"
-        if Path("dist/install_browser.sh").exists():
-            shutil.copy2("dist/install_browser.sh", install_script)
-            os.chmod(install_script, 0o755)
-            print(f"  复制: install_browser.sh")
+        readme_content = f"""Spreado v{get_version()} - {platform_name} ({arch})
+
+=== Browser Auto-Detection (Default) ===
+
+Spreado automatically detects installed Chrome/Edge browsers.
+Just run the executable directly:
+
+  Linux/macOS:  ./spreado --help
+  Windows:      spreado.exe --help
+
+The program will show which browser is being used:
+  [Browser] Using: auto-detected: /usr/bin/google-chrome
+
+
+=== Manual Configuration (if needed) ===
+
+If auto-detection doesn't work, you can manually specify:
+
+  # Use system Chrome
+  export SPREADO_BROWSER_CHANNEL=chrome
+
+  # Or use Edge  
+  export SPREADO_BROWSER_CHANNEL=msedge
+
+  # Or specify browser path directly
+  export SPREADO_BROWSER_PATH="/path/to/chrome"
+
+  # Or install Playwright Chromium
+  playwright install chromium
+
+
+For more info: https://github.com/BadKid90s/Spreado
+"""
+    readme_path = temp_dir / "README.txt"
+    readme_path.write_text(readme_content, encoding="utf-8")
+    print("  Created: README.txt")
+
+    # Create run script (with browser path set)
+    if browser_bundled:
+        if platform.system() == "Windows":
+            run_script = temp_dir / "run.bat"
+            run_content = f'@echo off\nset PLAYWRIGHT_BROWSERS_PATH=%~dp0browser\n"{APP_NAME}.exe" %*\n'
+            run_script.write_text(run_content, encoding="utf-8")
+            print("  Created: run.bat")
+        else:
+            run_script = temp_dir / "run.sh"
+            run_content = f"""#!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+export PLAYWRIGHT_BROWSERS_PATH="$SCRIPT_DIR/browser"
+"$SCRIPT_DIR/{APP_NAME}" "$@"
+"""
+            run_script.write_text(run_content, encoding="utf-8")
+            os.chmod(run_script, 0o755)
+            print("  Created: run.sh")
+
+    # Ensure output directory exists
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     archive_path = output_dir / f"{pkg_name}.tar.gz"
+    print(f"\n  Creating archive: {archive_path.name}")
+
     with tarfile.open(archive_path, "w:gz") as tar:
         for item in temp_dir.iterdir():
-            tar.add(item, arcname=item.name)
-            print(f"  打包: {item.name}")
+            if item.is_dir():
+                # For directories (like browser), add with directory structure
+                print(f"  Packing directory: {item.name}/ (this may take a while...)")
+                tar.add(item, arcname=item.name)
+            else:
+                tar.add(item, arcname=item.name)
+                print(f"  Packed: {item.name}")
+
+    # Show final archive size
+    archive_size = archive_path.stat().st_size / (1024 * 1024)
+    print(f"  Archive size: {archive_size:.1f} MB")
 
     shutil.rmtree(temp_dir)
-    print(f"\n✓ {platform_name} ({arch}) 构建完成")
-    print(f"  输出文件: {archive_path}")
+    print(f"\n[OK] {platform_name} ({arch}) build completed")
+    print(f"  Output: {archive_path}")
 
     return archive_path
 
 
 def build_current_platform():
-    """构建当前平台的二进制文件"""
+    """Build binary for current platform"""
     system, machine, exe_ext = get_platform_info()
-    platform_name = f"{system}-{machine}"
     return build_specific_platform(system, machine)
 
 
 def build_all_platforms():
-    """构建所有平台的二进制文件"""
+    """Build binaries for all platforms"""
     platforms = [
         ("windows", "x64"),
+        ("windows", "arm64"),
         ("macos", "x64"),
         ("macos", "arm64"),
         ("linux", "x64"),
@@ -215,11 +426,11 @@ def build_all_platforms():
             result = build_specific_platform(platform_name, arch)
             results.append((platform_name, arch, result))
         except Exception as e:
-            print(f"\n✗ 构建失败 {platform_name} ({arch}): {e}")
+            print(f"\n[X] Build failed {platform_name} ({arch}): {e}")
             results.append((platform_name, arch, None))
 
     print(f"\n{'='*60}")
-    print(f"  构建汇总")
+    print("  Build Summary")
     print(f"{'='*60}")
 
     skipped = sum(1 for r in results if r[2] is None)
@@ -228,23 +439,25 @@ def build_all_platforms():
 
     for platform_name, arch, archive_path in results:
         if archive_path is None:
-            print(f"  {platform_name:10} ({arch:6}): ⊘ 跳过（跨平台限制）")
+            print(f"  {platform_name:10} ({arch:6}): [-] Skipped (cross-platform)")
         elif archive_path is False:
-            print(f"  {platform_name:10} ({arch:6}): ✗ 失败")
+            print(f"  {platform_name:10} ({arch:6}): [X] Failed")
         else:
-            print(f"  {platform_name:10} ({arch:6}): ✓ {archive_path.name}")
+            print(f"  {platform_name:10} ({arch:6}): [OK] {archive_path.name}")
 
-    print(f"\n  总计: {succeeded} 成功, {failed} 失败, {skipped} 跳过")
-    print(f"\n  提示: 在 {platform.system()}-{platform.machine()} 上只能构建当前平台的二进制文件")
-    print(f"        如需构建其他平台，请在对应操作系统上运行此脚本")
+    print(f"\n  Total: {succeeded} succeeded, {failed} failed, {skipped} skipped")
+    print(
+        f"\n  Note: On {platform.system()}-{platform.machine()}, only current platform binary can be built"
+    )
+    print("        To build for other platforms, run this script on the target OS")
 
     return succeeded > 0 and failed == 0
 
 
 def upload_to_pypi(test=True):
-    """上传到 PyPI"""
+    """Upload to PyPI"""
     print(f"\n{'='*60}")
-    print(f"  准备上传到 PyPI")
+    print("  Preparing to upload to PyPI")
     print(f"{'='*60}")
 
     if test:
@@ -254,73 +467,80 @@ def upload_to_pypi(test=True):
         pypi_cmd = ["twine", "upload", "dist/*"]
         pypi_type = "PyPI"
 
-    print(f"\n正在上传到 {pypi_type}...")
-    print(f"命令: {' '.join(pypi_cmd)}")
+    print(f"\nUploading to {pypi_type}...")
+    print(f"Command: {' '.join(pypi_cmd)}")
 
     result = subprocess.run(pypi_cmd)
 
     if result.returncode == 0:
-        print(f"\n✓ 上传成功!")
+        print("\n[OK] Upload succeeded!")
     else:
-        print(f"\n✗ 上传失败")
+        print("\n[X] Upload failed")
 
     return result.returncode == 0
 
 
 def create_wheels_for_pypi():
-    """为 PyPI 创建 wheel 文件"""
+    """Create wheel files for PyPI"""
     print(f"\n{'='*60}")
-    print(f"  创建 Python Wheel 文件")
+    print("  Creating Python Wheel files")
     print(f"{'='*60}")
 
     build_cmd = [sys.executable, "-m", "build", "--wheel"]
     result = subprocess.run(build_cmd)
 
     if result.returncode == 0:
-        print(f"\n✓ Wheel 文件创建成功")
+        print("\n[OK] Wheel files created successfully")
         dist_path = Path("dist")
         for wheel_file in dist_path.glob("*.whl"):
             print(f"  {wheel_file.name}")
     else:
-        print(f"\n✗ Wheel 文件创建失败")
+        print("\n[X] Wheel file creation failed")
 
     return result.returncode == 0
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Spreado 二进制分发构建工具",
+        description="Spreado Binary Build Tool",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-示例:
-  python build_binary.py              # 构建当前平台
-  python build_binary.py --all        # 构建所有平台
-  python build_binary.py --upload     # 上传到 PyPI (测试)
-  python build_binary.py --release    # 完整发布流程
-        """
+Examples:
+  python build_binary.py              # Build for current platform
+  python build_binary.py --all        # Build for all platforms
+  python build_binary.py --upload     # Upload to PyPI (test)
+  python build_binary.py --release    # Full release workflow
+        """,
     )
 
-    parser.add_argument("--all", action="store_true",
-                        help="构建所有平台的二进制文件")
-    parser.add_argument("--upload", action="store_true",
-                        help="上传到 PyPI (测试环境)")
-    parser.add_argument("--release", action="store_true",
-                        help="完整发布流程（构建并上传到正式 PyPI）")
-    parser.add_argument("--wheels", action="store_true",
-                        help="仅创建 Python wheel 文件")
-    parser.add_argument("--clean", action="store_true",
-                        help="仅清理构建目录")
+    parser.add_argument(
+        "--all", action="store_true", help="Build binaries for all platforms"
+    )
+    parser.add_argument(
+        "--upload", action="store_true", help="Upload to PyPI (test environment)"
+    )
+    parser.add_argument(
+        "--release",
+        action="store_true",
+        help="Full release workflow (build and upload to PyPI)",
+    )
+    parser.add_argument(
+        "--wheels", action="store_true", help="Only create Python wheel files"
+    )
+    parser.add_argument(
+        "--clean", action="store_true", help="Only clean build directories"
+    )
 
     args = parser.parse_args()
 
     version = get_version()
     print(f"\n{'='*60}")
-    print(f"  Spreado 二进制构建工具 v{version}")
+    print(f"  Spreado Binary Build Tool v{version}")
     print(f"{'='*60}")
 
     if args.clean:
         clean_build_dirs()
-        print(f"\n✓ 清理完成")
+        print("\n[OK] Clean completed")
         return 0
 
     if args.wheels:

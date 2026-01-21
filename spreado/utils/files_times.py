@@ -41,13 +41,16 @@ def get_title_and_hashtags(filename):
     hashtags = splite_str[2]
 
     import re
-    tags = re.split(r'[,，\s]+', hashtags.strip())
+
+    tags = re.split(r"[,，\s]+", hashtags.strip())
     tags = [tag for tag in tags if tag]
 
     return title, content_text, tags
 
 
-def generate_schedule_time_next_day(total_videos, videos_per_day=1, daily_times=None, timestamps=False, start_days=0):
+def generate_schedule_time_next_day(
+    total_videos, videos_per_day=1, daily_times=None, timestamps=False, start_days=0
+):
     """
     生成视频上传时间表，从下一天开始
 
@@ -78,8 +81,13 @@ def generate_schedule_time_next_day(total_videos, videos_per_day=1, daily_times=
         daily_video_index = video % videos_per_day
 
         hour = daily_times[daily_video_index]
-        time_offset = timedelta(days=day, hours=hour - current_time.hour, minutes=-current_time.minute,
-                                seconds=-current_time.second, microseconds=-current_time.microsecond)
+        time_offset = timedelta(
+            days=day,
+            hours=hour - current_time.hour,
+            minutes=-current_time.minute,
+            seconds=-current_time.second,
+            microseconds=-current_time.microsecond,
+        )
         timestamp = current_time + time_offset
 
         schedule.append(timestamp)
@@ -89,7 +97,9 @@ def generate_schedule_time_next_day(total_videos, videos_per_day=1, daily_times=
     return schedule
 
 
-if __name__ == '__main__':
-    title, tags = get_title_and_hashtags("/Users/wry/PycharmProjects/uploader/examples/videos/demo.txt")
+if __name__ == "__main__":
+    title, tags = get_title_and_hashtags(
+        "/Users/wry/PycharmProjects/uploader/examples/videos/demo.txt"
+    )
     print(f"标题：{title}")
     print(f"Hashtag：{tags}")

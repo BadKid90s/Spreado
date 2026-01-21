@@ -32,7 +32,7 @@ async def main():
         content=content,
         tags=tags,
         publish_date=publish_time,
-        thumbnail_path=thumbnail_path
+        thumbnail_path=thumbnail_path,
     )
     if result:
         print(f"{uploader.platform_name}视频上传成功！")
@@ -40,5 +40,5 @@ async def main():
         print(f"{uploader.platform_name}视频上传失败！")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     asyncio.run(main())
