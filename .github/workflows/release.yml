@@ -91,9 +91,6 @@ jobs:
           pip install -e .
           pip install pyinstaller==6.10.0
 
-      - name: Install Playwright browsers
-        run: playwright install chromium
-
       - name: Build binary
         # 你的脚本必须能接受参数或者自动识别系统
         run: python build_binary.py

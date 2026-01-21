@@ -43,23 +43,23 @@ BROWSER_PATHS = {
 def _detect_system_browser() -> Optional[str]:
     """
     自动检测系统已安装的浏览器
-    
+
     Returns:
         浏览器可执行文件路径，未找到返回 None
     """
     system = platform.system().lower()
-    
+
     for path in BROWSER_PATHS.get(system, []):
         if Path(path).exists():
             return path
-    
+
     return None
 
 
 class StealthBrowser:
     """
     支持多种浏览器选项的隐身浏览器
-    
+
     浏览器选择优先级：
     1. executable_path 参数 - 指定浏览器路径
     2. channel 参数 - 使用系统浏览器 (chrome/msedge)
@@ -68,9 +68,9 @@ class StealthBrowser:
     5. 自动检测系统已安装的 Chrome/Edge/Chromium
     6. 默认使用 Playwright 内置的 Chromium
     """
-    
+
     def __init__(
-        self, 
+        self,
         headless: bool = False,
         channel: BrowserChannel = None,
         executable_path: Optional[str] = None,
@@ -90,7 +90,7 @@ class StealthBrowser:
 
     @classmethod
     async def create(
-        cls, 
+        cls,
         headless: bool = True,
         channel: BrowserChannel = None,
         executable_path: Optional[str] = None,
@@ -103,41 +103,41 @@ class StealthBrowser:
     def _get_browser_config(self) -> tuple[dict, str]:
         """
         获取浏览器配置
-        
+
         Returns:
             (config_dict, browser_source) - 配置字典和浏览器来源描述
         """
         config = {}
-        
+
         # 优先级 1: 参数指定的 executable_path
         if self.executable_path:
             config["executable_path"] = self.executable_path
             return config, f"executable_path: {self.executable_path}"
-        
+
         # 优先级 2: 参数指定的 channel
         if self.channel:
             if self.channel != "chromium":
                 config["channel"] = self.channel
             return config, f"channel: {self.channel}"
-        
+
         # 优先级 3: 环境变量 SPREADO_BROWSER_PATH
         env_path = os.environ.get("SPREADO_BROWSER_PATH")
         if env_path and Path(env_path).exists():
             config["executable_path"] = env_path
             return config, f"env SPREADO_BROWSER_PATH: {env_path}"
-        
+
         # 优先级 4: 环境变量 SPREADO_BROWSER_CHANNEL
         env_channel = os.environ.get("SPREADO_BROWSER_CHANNEL")
         if env_channel in ("chrome", "msedge"):
             config["channel"] = env_channel
             return config, f"env SPREADO_BROWSER_CHANNEL: {env_channel}"
-        
+
         # 优先级 5: 自动检测系统浏览器
         detected_path = _detect_system_browser()
         if detected_path:
             config["executable_path"] = detected_path
             return config, f"auto-detected: {detected_path}"
-        
+
         # 默认: 使用 Playwright 内置 Chromium
         return config, "Playwright built-in Chromium"
 
@@ -154,7 +154,7 @@ class StealthBrowser:
         # 获取浏览器配置
         browser_config, browser_source = self._get_browser_config()
         print(f"[Browser] Using: {browser_source}")
-        
+
         self.browser = await self.playwright.chromium.launch(
             headless=self.headless,
             args=args,

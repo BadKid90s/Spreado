@@ -23,7 +23,6 @@ import shutil
 import subprocess
 import platform
 import argparse
-import json
 from pathlib import Path
 
 APP_NAME = "spreado"
@@ -33,61 +32,70 @@ VERSION_FILE = Path("spreado/__version__.py")
 def get_playwright_browser_path():
     """Get Playwright browser installation path"""
     system = platform.system().lower()
-    
+
     if system == "windows":
-        base_path = Path(os.environ.get("USERPROFILE", "")) / "AppData" / "Local" / "ms-playwright"
+        base_path = (
+            Path(os.environ.get("USERPROFILE", ""))
+            / "AppData"
+            / "Local"
+            / "ms-playwright"
+        )
     elif system == "darwin":
         base_path = Path.home() / "Library" / "Caches" / "ms-playwright"
     else:
         base_path = Path.home() / ".cache" / "ms-playwright"
-    
+
     return base_path
 
 
 def find_chromium_path():
     """Find Chromium browser path in Playwright installation"""
     browser_path = get_playwright_browser_path()
-    
+
     if not browser_path.exists():
         print(f"  [!] Playwright browser path not found: {browser_path}")
         return None
-    
+
     # Find chromium directory (e.g., chromium-1140, chromium-1148)
     chromium_dirs = list(browser_path.glob("chromium-*"))
     if not chromium_dirs:
         print(f"  [!] No Chromium installation found in: {browser_path}")
         return None
-    
+
     # Use the latest version
     chromium_dir = sorted(chromium_dirs)[-1]
     print(f"  Found Chromium: {chromium_dir.name}")
-    
+
     return chromium_dir
 
 
 def copy_chromium_to_package(temp_dir: Path):
     """Copy Chromium browser to package directory"""
     chromium_path = find_chromium_path()
-    
+
     if not chromium_path:
         print("  [!] Chromium not found, skipping browser bundling")
         return False
-    
+
     # Create browser directory in package
     browser_dest = temp_dir / "browser"
     browser_dest.mkdir(parents=True, exist_ok=True)
-    
-    print(f"  Copying Chromium browser (this may take a while)...")
-    
+
+    print("  Copying Chromium browser (this may take a while)...")
+
     try:
         # Copy entire chromium directory
         shutil.copytree(chromium_path, browser_dest / chromium_path.name)
-        
+
         # Get size
-        total_size = sum(f.stat().st_size for f in (browser_dest / chromium_path.name).rglob("*") if f.is_file())
+        total_size = sum(
+            f.stat().st_size
+            for f in (browser_dest / chromium_path.name).rglob("*")
+            if f.is_file()
+        )
         size_mb = total_size / (1024 * 1024)
         print(f"  Copied Chromium browser: {size_mb:.1f} MB")
-        
+
         return True
     except Exception as e:
         print(f"  [!] Failed to copy Chromium: {e}")
@@ -198,25 +206,34 @@ def build_specific_platform(platform_name, arch, output_dir=None, onefile=True):
 
     # Use PyInstaller directly
     entry_point = "spreado/__main__.py"
-    
+
     build_cmd = [
         sys.executable,
         "-m",
         "PyInstaller",
-        "--name", APP_NAME,
+        "--name",
+        APP_NAME,
         "--onefile" if onefile else "--onedir",
         "--clean",
         "--noconfirm",
         # Collect playwright related data
-        "--collect-all", "playwright",
-        "--collect-all", "playwright_stealth",
+        "--collect-all",
+        "playwright",
+        "--collect-all",
+        "playwright_stealth",
         # Hidden imports
-        "--hidden-import", "spreado.cli.cli",
-        "--hidden-import", "spreado.publisher",
-        "--hidden-import", "spreado.publisher.douyin_uploader",
-        "--hidden-import", "spreado.publisher.xiaohongshu_uploader",
-        "--hidden-import", "spreado.publisher.kuaishou_uploader",
-        "--hidden-import", "spreado.publisher.shipinhao_uploader",
+        "--hidden-import",
+        "spreado.cli.cli",
+        "--hidden-import",
+        "spreado.publisher",
+        "--hidden-import",
+        "spreado.publisher.douyin_uploader",
+        "--hidden-import",
+        "spreado.publisher.xiaohongshu_uploader",
+        "--hidden-import",
+        "spreado.publisher.kuaishou_uploader",
+        "--hidden-import",
+        "spreado.publisher.shipinhao_uploader",
         entry_point,
     ]
 
@@ -350,11 +367,11 @@ For more info: https://github.com/BadKid90s/Spreado
             print("  Created: run.bat")
         else:
             run_script = temp_dir / "run.sh"
-            run_content = f'''#!/bin/bash
+            run_content = f"""#!/bin/bash
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 export PLAYWRIGHT_BROWSERS_PATH="$SCRIPT_DIR/browser"
 "$SCRIPT_DIR/{APP_NAME}" "$@"
-'''
+"""
             run_script.write_text(run_content, encoding="utf-8")
             os.chmod(run_script, 0o755)
             print("  Created: run.sh")
@@ -364,7 +381,7 @@ export PLAYWRIGHT_BROWSERS_PATH="$SCRIPT_DIR/browser"
 
     archive_path = output_dir / f"{pkg_name}.tar.gz"
     print(f"\n  Creating archive: {archive_path.name}")
-    
+
     with tarfile.open(archive_path, "w:gz") as tar:
         for item in temp_dir.iterdir():
             if item.is_dir():
@@ -374,7 +391,7 @@ export PLAYWRIGHT_BROWSERS_PATH="$SCRIPT_DIR/browser"
             else:
                 tar.add(item, arcname=item.name)
                 print(f"  Packed: {item.name}")
-    
+
     # Show final archive size
     archive_size = archive_path.stat().st_size / (1024 * 1024)
     print(f"  Archive size: {archive_size:.1f} MB")
@@ -496,15 +513,23 @@ Examples:
         """,
     )
 
-    parser.add_argument("--all", action="store_true", help="Build binaries for all platforms")
-    parser.add_argument("--upload", action="store_true", help="Upload to PyPI (test environment)")
     parser.add_argument(
-        "--release", action="store_true", help="Full release workflow (build and upload to PyPI)"
+        "--all", action="store_true", help="Build binaries for all platforms"
+    )
+    parser.add_argument(
+        "--upload", action="store_true", help="Upload to PyPI (test environment)"
+    )
+    parser.add_argument(
+        "--release",
+        action="store_true",
+        help="Full release workflow (build and upload to PyPI)",
     )
     parser.add_argument(
         "--wheels", action="store_true", help="Only create Python wheel files"
     )
-    parser.add_argument("--clean", action="store_true", help="Only clean build directories")
+    parser.add_argument(
+        "--clean", action="store_true", help="Only clean build directories"
+    )
 
     args = parser.parse_args()
 
