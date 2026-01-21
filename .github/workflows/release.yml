@@ -4,6 +4,7 @@ on:
   release:
     types: [created]
   workflow_dispatch:
+    # 手动触发测试分支的打包功能
     inputs:
       test_mode:
         description: 'Test mode (skip PyPI publish)'
