@@ -56,21 +56,21 @@ jobs:
           - os: ubuntu-latest
             platform: linux
             arch: x64
-          - os: ubuntu-24.04-arm
+          - os: ubuntu-latest-arm64
             platform: linux
             arch: arm64
           # macOS
-          - os: macos-13
+          - os: macOS-15
             platform: macos
             arch: x64
-          - os: macos-14
+          - os: mmacos-latest
             platform: macos
             arch: arm64
           # Windows
           - os: windows-latest
             platform: windows
             arch: x64
-          - os: windows-11-arm
+          - os: windows-latest-arm64
             platform: windows
             arch: arm64
 
@@ -88,13 +88,26 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e .
-          pip install pyinstaller
+          pip install pyinstaller==6.10.0
 
       - name: Install Playwright browsers
         run: playwright install chromium
 
       - name: Build binary for ${{ matrix.platform }} ${{ matrix.arch }}
         run: python build_binary.py
+
+      - name: Strip and codesign (macOS only)
+        if: runner.os == 'macOS'
+        run: |
+          # Find the executable in dist folder
+          EXEC_FILE=$(find dist -name "spreado" -type f | head -1)
+          if [ -n "$EXEC_FILE" ]; then
+            echo "Processing: $EXEC_FILE"
+            strip "$EXEC_FILE" || true
+            codesign --remove-signature "$EXEC_FILE" || true
+            codesign --sign - "$EXEC_FILE" || true
+            echo "Done!"
+          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
