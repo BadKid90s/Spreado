@@ -18,11 +18,13 @@ on:
         default: 'true'
 
 jobs:
-  # 1. 发布到 PyPI (仅在正式 Release 时或手动非测试模式下)
+  # 1. 发布到 PyPI (仅在正式 Release 时，排除 Pre-release 和 Draft)
   build-pypi:
     runs-on: ubuntu-latest
-    # 逻辑：如果是 release 事件，或者手动触发且 test_mode 为 false
-    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.test_mode == 'false')
+    # 逻辑：release 事件 + 非 prerelease + 非 draft，或者手动触发且 test_mode 为 false
+    if: |
+      (github.event_name == 'release' && !github.event.release.prerelease && !github.event.release.draft) ||
+      (github.event_name == 'workflow_dispatch' && inputs.test_mode == 'false')
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
