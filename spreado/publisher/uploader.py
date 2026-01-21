@@ -116,7 +116,7 @@ class BaseUploader(ABC):
                 self.logger.info("[+] 已打开登录页面，请在浏览器中完成登录操作")
                 # 1. 直接等待目标 URL 出现
                 await page.wait_for_url(
-                    url=self.login_success_url, timeout=60000, wait_until="commit"
+                    url=self.login_success_url, timeout=120000, wait_until="commit"
                 )
                 # 2. 到了这里说明 URL 匹配成功
                 self.cookie_file_path.parent.mkdir(parents=True, exist_ok=True)
