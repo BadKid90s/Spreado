@@ -2,7 +2,13 @@ from pathlib import Path
 from typing import Optional
 
 import json
-from playwright.async_api import async_playwright, Page, BrowserContext, Browser, Playwright
+from playwright.async_api import (
+    async_playwright,
+    Page,
+    BrowserContext,
+    Browser,
+    Playwright,
+)
 from playwright_stealth import Stealth
 
 
@@ -13,11 +19,9 @@ class StealthBrowser:
         """
         self.headless = headless
 
-
         self.playwright: Optional[Playwright] = None
         self.browser: Optional[Browser] = None
         self.context: Optional[BrowserContext] = None
-
 
     @classmethod
     async def create(cls, headless: bool = True) -> "StealthBrowser":
@@ -44,18 +48,15 @@ class StealthBrowser:
         # 3. 在创建 Context 时注入 storage_state
         # 这是最稳健的方式，同时恢复 Cookies 和 LocalStorage
         self.context = await self.browser.new_context(
-            no_viewport=True,
-            ignore_https_errors=True
+            no_viewport=True, ignore_https_errors=True
         )
 
         stealth = Stealth(
-            navigator_languages_override=("zh-CN", "zh"),
-            init_scripts_only=True
+            navigator_languages_override=("zh-CN", "zh"), init_scripts_only=True
         )
         await stealth.apply_stealth_async(self.context)
 
         return self
-
 
     async def new_page(self) -> Page:
         if not self.context:
@@ -93,7 +94,9 @@ class StealthBrowser:
             raw_cookies = data
 
         if not isinstance(raw_cookies, list):
-            raise RuntimeError(f"[错误] Cookie 文件格式不正确，应为列表或包含 'cookies' 字段: {path}")
+            raise RuntimeError(
+                f"[错误] Cookie 文件格式不正确，应为列表或包含 'cookies' 字段: {path}"
+            )
 
         # 强制转换成 Playwright Cookie 类型，方便 IDE 类型检查
         cookies = raw_cookies
@@ -126,10 +129,10 @@ class StealthBrowser:
             self.playwright = None
 
 
-
 # ==========================================
 # 实际使用示例
 # ==========================================
+
 
 class MySpider:
     def __init__(self):

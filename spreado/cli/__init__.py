@@ -6,4 +6,4 @@ CLI 模块
 
 from spreado.cli.cli import main
 
-__all__ = ['main']
+__all__ = ["main"]

@@ -1,6 +1,7 @@
 """
 项目配置文件
 """
+
 from pathlib import Path
 
 # 项目基础目录
@@ -17,4 +18,3 @@ CONSOLE_LOG_LEVEL = "INFO"  # 控制台输出的日志级别
 
 # 日志文件目录
 LOGS_DIR = BASE_DIR / "logs"
-

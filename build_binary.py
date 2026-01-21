@@ -25,7 +25,6 @@ import platform
 import argparse
 from pathlib import Path
 
-
 APP_NAME = "spreado"
 VERSION_FILE = Path("spreado/__version__.py")
 
@@ -100,7 +99,9 @@ def build_specific_platform(platform_name, arch, output_dir=None, onefile=True):
     current_system, current_arch, current_ext = get_platform_info()
 
     if (platform_name, arch) != (current_system, current_arch):
-        print(f"\n⚠ 跳过跨平台构建: 不能在 {current_system}-{current_arch} 上构建 {platform_name}-{arch}")
+        print(
+            f"\n⚠ 跳过跨平台构建: 不能在 {current_system}-{current_arch} 上构建 {platform_name}-{arch}"
+        )
         print("   请在目标平台上运行此脚本")
         return None
 
@@ -117,7 +118,8 @@ def build_specific_platform(platform_name, arch, output_dir=None, onefile=True):
     clean_build_dirs()
 
     build_cmd = [
-        sys.executable, "build.py",
+        sys.executable,
+        "build.py",
         "--no-archive",
     ]
 
@@ -233,7 +235,9 @@ def build_all_platforms():
             print(f"  {platform_name:10} ({arch:6}): ✓ {archive_path.name}")
 
     print(f"\n  总计: {succeeded} 成功, {failed} 失败, {skipped} 跳过")
-    print(f"\n  提示: 在 {platform.system()}-{platform.machine()} 上只能构建当前平台的二进制文件")
+    print(
+        f"\n  提示: 在 {platform.system()}-{platform.machine()} 上只能构建当前平台的二进制文件"
+    )
     print("        如需构建其他平台，请在对应操作系统上运行此脚本")
 
     return succeeded > 0 and failed == 0
@@ -295,19 +299,18 @@ def main():
   python build_binary.py --all        # 构建所有平台
   python build_binary.py --upload     # 上传到 PyPI (测试)
   python build_binary.py --release    # 完整发布流程
-        """
+        """,
     )
 
-    parser.add_argument("--all", action="store_true",
-                        help="构建所有平台的二进制文件")
-    parser.add_argument("--upload", action="store_true",
-                        help="上传到 PyPI (测试环境)")
-    parser.add_argument("--release", action="store_true",
-                        help="完整发布流程（构建并上传到正式 PyPI）")
-    parser.add_argument("--wheels", action="store_true",
-                        help="仅创建 Python wheel 文件")
-    parser.add_argument("--clean", action="store_true",
-                        help="仅清理构建目录")
+    parser.add_argument("--all", action="store_true", help="构建所有平台的二进制文件")
+    parser.add_argument("--upload", action="store_true", help="上传到 PyPI (测试环境)")
+    parser.add_argument(
+        "--release", action="store_true", help="完整发布流程（构建并上传到正式 PyPI）"
+    )
+    parser.add_argument(
+        "--wheels", action="store_true", help="仅创建 Python wheel 文件"
+    )
+    parser.add_argument("--clean", action="store_true", help="仅清理构建目录")
 
     args = parser.parse_args()
 

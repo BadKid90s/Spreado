@@ -16,11 +16,14 @@ class BaseUploader(ABC):
     上传器基类，定义通用的上传流程和接口
     所有平台上传器必须继承此类并实现抽象方法
     """
+
     logger: Optional[logging.Logger] = None  # 日志组件
     browser: Optional[StealthBrowser] = None  # 浏览器实例
     cookie_file_path: str | Path = None  # Cookie 保存路径
 
-    def __init__(self, logger: logging.Logger = None, cookie_file_path: str | Path = None):
+    def __init__(
+        self, logger: logging.Logger = None, cookie_file_path: str | Path = None
+    ):
         """
         初始化上传器
 
@@ -35,7 +38,12 @@ class BaseUploader(ABC):
 
         # 初始化Cookie文件
         if cookie_file_path is None:
-            self.cookie_file_path = Path(BASE_DIR) / "cookies" / f"{self.platform_name}_uploader" / "account.json"
+            self.cookie_file_path = (
+                Path(BASE_DIR)
+                / "cookies"
+                / f"{self.platform_name}_uploader"
+                / "account.json"
+            )
         else:
             self.cookie_file_path = Path(cookie_file_path)
 
@@ -108,9 +116,7 @@ class BaseUploader(ABC):
                 self.logger.info("[+] 已打开登录页面，请在浏览器中完成登录操作")
                 # 1. 直接等待目标 URL 出现
                 await page.wait_for_url(
-                    url=self.login_success_url,
-                    timeout=60000,
-                    wait_until="commit"
+                    url=self.login_success_url, timeout=60000, wait_until="commit"
                 )
                 # 2. 到了这里说明 URL 匹配成功
                 self.cookie_file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -148,14 +154,14 @@ class BaseUploader(ABC):
         return False
 
     async def upload_video_flow(
-            self,
-            file_path: str | Path,
-            title: str = "",
-            content: str = "",
-            tags: List[str] = None,
-            publish_date: Optional[datetime] = None,
-            thumbnail_path: Optional[str | Path] = None,
-            auto_login: bool = False,
+        self,
+        file_path: str | Path,
+        title: str = "",
+        content: str = "",
+        tags: List[str] = None,
+        publish_date: Optional[datetime] = None,
+        thumbnail_path: Optional[str | Path] = None,
+        auto_login: bool = False,
     ) -> bool:
         """
         主上传流程，包含登录验证和视频上传
@@ -193,7 +199,7 @@ class BaseUploader(ABC):
                         content=content,
                         tags=tags,
                         publish_date=publish_date,
-                        thumbnail_path=thumbnail_path
+                        thumbnail_path=thumbnail_path,
                     )
                     if result:
                         self.logger.info(f"[+] 视频上传成功: {title}")
@@ -248,9 +254,9 @@ class BaseUploader(ABC):
         """
         target_url = self.success_url_pattern
         return (
-                current_url.startswith(target_url) or
-                current_url.split('?')[0] == target_url.split('?')[0] or
-                target_url in current_url
+            current_url.startswith(target_url)
+            or current_url.split("?")[0] == target_url.split("?")[0]
+            or target_url in current_url
         )
 
     async def _verify_cookie(self) -> bool:
@@ -287,14 +293,14 @@ class BaseUploader(ABC):
 
     @abstractmethod
     async def _upload_video(
-            self,
-            page: Page,
-            file_path: str | Path,
-            title: str = "",
-            content: str = "",
-            tags: List[str] = None,
-            publish_date: Optional[datetime] = None,
-            thumbnail_path: Optional[str | Path] = None,
+        self,
+        page: Page,
+        file_path: str | Path,
+        title: str = "",
+        content: str = "",
+        tags: List[str] = None,
+        publish_date: Optional[datetime] = None,
+        thumbnail_path: Optional[str | Path] = None,
     ) -> bool:
         """
         上传视频
@@ -314,14 +320,16 @@ class BaseUploader(ABC):
         pass
 
     async def _find_first_element(
-            self,
-            page: Page,
-            selectors: List[str],
-            *,
-            timeout: int = 5000,
-            state: Literal['visible', 'attached', 'hidden', 'detached'] = 'visible',
-            callback: Optional[Callable[[Locator, Page, Dict[str, Any]], Awaitable[Any]]] = None,
-            on_not_found: Optional[Callable[[Page, List[str]], Awaitable[None]]] = None,
+        self,
+        page: Page,
+        selectors: List[str],
+        *,
+        timeout: int = 5000,
+        state: Literal["visible", "attached", "hidden", "detached"] = "visible",
+        callback: Optional[
+            Callable[[Locator, Page, Dict[str, Any]], Awaitable[Any]]
+        ] = None,
+        on_not_found: Optional[Callable[[Page, List[str]], Awaitable[None]]] = None,
     ) -> Optional[Locator]:
         """
         通过多个选择器查找第一个可用元素（增强版）
@@ -347,21 +355,25 @@ class BaseUploader(ABC):
                 # 检查元素数量
                 count = await element.count()
                 if count == 0:
-                    self.logger.debug(f"[-] 选择器未匹配 [{idx + 1}/{len(selectors)}]: {selector}")
+                    self.logger.debug(
+                        f"[-] 选择器未匹配 [{idx + 1}/{len(selectors)}]: {selector}"
+                    )
                     continue
 
                 # 等待元素状态
                 await element.wait_for(state=state, timeout=timeout)
 
-                self.logger.info(f"[✓] 找到元素 [{idx + 1}/{len(selectors)}]: {selector}")
+                self.logger.info(
+                    f"[✓] 找到元素 [{idx + 1}/{len(selectors)}]: {selector}"
+                )
 
                 # 构建信息字典
                 info = {
-                    'selector': selector,
-                    'index': idx,
-                    'total': len(selectors),
-                    'count': count,
-                    'state': state
+                    "selector": selector,
+                    "index": idx,
+                    "total": len(selectors),
+                    "count": count,
+                    "state": state,
                 }
 
                 # 执行回调
@@ -374,7 +386,9 @@ class BaseUploader(ABC):
                 return element
 
             except Exception as e:
-                self.logger.debug(f"[-] 选择器失败 [{idx + 1}/{len(selectors)}] {selector}: {e}")
+                self.logger.debug(
+                    f"[-] 选择器失败 [{idx + 1}/{len(selectors)}] {selector}: {e}"
+                )
                 continue
 
         # 所有选择器都失败

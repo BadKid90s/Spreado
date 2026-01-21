@@ -79,6 +79,7 @@ async def login_single_platform(platform: str, args, logger) -> bool:
         logger.error(f"✗ {platform_name} 登录异常: {e}")
         if args.debug:
             import traceback
+
             traceback.print_exc()
         return False
 
@@ -87,7 +88,7 @@ async def cmd_login(args):
     """登录命令"""
     logger = get_logger("LOGIN")
 
-    platforms = list(UPLOADERS.keys()) 
+    platforms = list(UPLOADERS.keys())
 
     success_count = 0
     fail_count = 0
@@ -131,6 +132,7 @@ async def verify_single_platform(platform: str, args, logger) -> bool:
         logger.error(f"✗ {platform_name} 验证异常: {e}")
         if args.debug:
             import traceback
+
             traceback.print_exc()
         return False
 
@@ -139,7 +141,7 @@ async def cmd_verify(args):
     """验证 Cookie 命令"""
     logger = get_logger("VERIFY")
 
-    platforms = list(UPLOADERS.keys()) if args.platform == 'all' else [args.platform]
+    platforms = list(UPLOADERS.keys()) if args.platform == "all" else [args.platform]
 
     print(f"\n{'=' * 50}")
     print("验证 Cookie 状态")
@@ -171,15 +173,15 @@ async def cmd_verify(args):
 
 
 async def upload_single_platform(
-        platform: str,
-        video_path: Path,
-        title: str,
-        content: str,
-        tags: List[str],
-        publish_date: datetime,
-        thumbnail_path: Path,
-        args,
-        logger
+    platform: str,
+    video_path: Path,
+    title: str,
+    content: str,
+    tags: List[str],
+    publish_date: datetime,
+    thumbnail_path: Path,
+    args,
+    logger,
 ) -> bool:
     """上传到单个平台"""
     platform_name = PLATFORM_NAMES.get(platform, platform)
@@ -211,6 +213,7 @@ async def upload_single_platform(
         logger.error(f"✗ {platform_name} 上传异常: {e}")
         if args.debug:
             import traceback
+
             traceback.print_exc()
         return False
 
@@ -236,7 +239,7 @@ async def cmd_upload(args):
     # 解析标签
     tags = []
     if args.tags:
-        tags = [tag.strip() for tag in args.tags.split(',') if tag.strip()]
+        tags = [tag.strip() for tag in args.tags.split(",") if tag.strip()]
 
     # 解析发布时间
     publish_date = None
@@ -253,7 +256,7 @@ async def cmd_upload(args):
             return 1
 
     # 选择平台
-    platforms = list(UPLOADERS.keys()) if args.platform == 'all' else [args.platform]
+    platforms = list(UPLOADERS.keys()) if args.platform == "all" else [args.platform]
 
     # 显示上传信息
     print(f"\n{'=' * 50}")
@@ -263,7 +266,9 @@ async def cmd_upload(args):
     print(f"  标题: {args.title or '(无)'}")
     print(f"  标签: {', '.join(tags) if tags else '(无)'}")
     print(f"  封面: {thumbnail_path.name if thumbnail_path else '(无)'}")
-    print(f"  定时: {publish_date.strftime('%Y-%m-%d %H:%M') if publish_date else '立即发布'}")
+    print(
+        f"  定时: {publish_date.strftime('%Y-%m-%d %H:%M') if publish_date else '立即发布'}"
+    )
     print(f"  平台: {', '.join(PLATFORM_NAMES.get(p, p) for p in platforms)}")
     print(f"{'=' * 50}\n")
 
@@ -280,7 +285,7 @@ async def cmd_upload(args):
                 publish_date=publish_date,
                 thumbnail_path=thumbnail_path,
                 args=args,
-                logger=logger
+                logger=logger,
             )
             for p in platforms
         ]
@@ -303,7 +308,7 @@ async def cmd_upload(args):
                 publish_date=publish_date,
                 thumbnail_path=thumbnail_path,
                 args=args,
-                logger=logger
+                logger=logger,
             )
             if result:
                 success_count += 1
@@ -320,8 +325,8 @@ async def cmd_upload(args):
 def create_parser():
     """创建命令行解析器"""
     parser = argparse.ArgumentParser(
-        prog='spreado',
-        description='Spreado - 全平台内容发布工具',
+        prog="spreado",
+        description="Spreado - 全平台内容发布工具",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
@@ -335,134 +340,82 @@ def create_parser():
   # 上传视频
   spreado upload douyin --video video.mp4 --title "标题"
   spreado upload all --video video.mp4 --parallel
-"""
+""",
     )
 
     parser.add_argument(
-        '-v', '--version',
-        action='version',
-        version=f'Spreado {__version__}'
+        "-v", "--version", action="version", version=f"Spreado {__version__}"
     )
 
     # 子命令
     subparsers = parser.add_subparsers(
-        dest='command',
-        title='命令',
-        description='可用命令',
-        help='使用 spreado <命令> --help 查看详细帮助'
+        dest="command",
+        title="命令",
+        description="可用命令",
+        help="使用 spreado <命令> --help 查看详细帮助",
     )
 
     # ==================== login 命令 ====================
     login_parser = subparsers.add_parser(
-        'login',
-        help='登录平台获取 Cookie',
-        description='登录指定平台，获取并保存 Cookie'
+        "login",
+        help="登录平台获取 Cookie",
+        description="登录指定平台，获取并保存 Cookie",
     )
     login_parser.add_argument(
-        'platform',
-        choices=['douyin', 'xiaohongshu', 'kuaishou', 'shipinhao'],
-        help='目标平台'
+        "platform",
+        choices=["douyin", "xiaohongshu", "kuaishou", "shipinhao"],
+        help="目标平台",
     )
-    login_parser.add_argument(
-        '--cookies',
-        type=str,
-        help='Cookie 保存路径'
-    )
-    login_parser.add_argument(
-        '--debug',
-        action='store_true',
-        help='调试模式'
-    )
+    login_parser.add_argument("--cookies", type=str, help="Cookie 保存路径")
+    login_parser.add_argument("--debug", action="store_true", help="调试模式")
     login_parser.set_defaults(func=cmd_login)
 
     # ==================== verify 命令 ====================
     verify_parser = subparsers.add_parser(
-        'verify',
-        help='验证 Cookie 是否有效',
-        description='验证指定平台的 Cookie 是否有效'
+        "verify",
+        help="验证 Cookie 是否有效",
+        description="验证指定平台的 Cookie 是否有效",
     )
     verify_parser.add_argument(
-        'platform',
-        choices=['douyin', 'xiaohongshu', 'kuaishou', 'shipinhao', 'all'],
-        help='目标平台 (all 表示所有平台)'
+        "platform",
+        choices=["douyin", "xiaohongshu", "kuaishou", "shipinhao", "all"],
+        help="目标平台 (all 表示所有平台)",
     )
+    verify_parser.add_argument("--cookies", type=str, help="Cookie 文件路径")
     verify_parser.add_argument(
-        '--cookies',
-        type=str,
-        help='Cookie 文件路径'
+        "--parallel", "-p", action="store_true", help="并行验证多个平台"
     )
-    verify_parser.add_argument(
-        '--parallel', '-p',
-        action='store_true',
-        help='并行验证多个平台'
-    )
-    verify_parser.add_argument(
-        '--debug',
-        action='store_true',
-        help='调试模式'
-    )
+    verify_parser.add_argument("--debug", action="store_true", help="调试模式")
     verify_parser.set_defaults(func=cmd_verify)
 
     # ==================== upload 命令 ====================
     upload_parser = subparsers.add_parser(
-        'upload',
-        help='上传视频',
-        description='上传视频到指定平台'
+        "upload", help="上传视频", description="上传视频到指定平台"
     )
     upload_parser.add_argument(
-        'platform',
-        choices=['douyin', 'xiaohongshu', 'kuaishou', 'shipinhao', 'all'],
-        help='目标平台 (all 表示所有平台)'
+        "platform",
+        choices=["douyin", "xiaohongshu", "kuaishou", "shipinhao", "all"],
+        help="目标平台 (all 表示所有平台)",
     )
     upload_parser.add_argument(
-        '--video', '-V',
-        required=True,
-        type=str,
-        help='视频文件路径'
+        "--video", "-V", required=True, type=str, help="视频文件路径"
+    )
+    upload_parser.add_argument("--title", "-t", type=str, default="", help="视频标题")
+    upload_parser.add_argument(
+        "--content", "-c", type=str, default="", help="视频描述/正文"
     )
     upload_parser.add_argument(
-        '--title', '-t',
-        type=str,
-        default='',
-        help='视频标题'
+        "--tags", type=str, default="", help="视频标签，多个用逗号分隔"
     )
+    upload_parser.add_argument("--cover", type=str, help="封面图片路径")
     upload_parser.add_argument(
-        '--content', '-c',
-        type=str,
-        default='',
-        help='视频描述/正文'
+        "--schedule", type=str, help='定时发布 (小时数 或 "YYYY-MM-DD HH:MM")'
     )
+    upload_parser.add_argument("--cookies", type=str, help="Cookie 文件路径")
     upload_parser.add_argument(
-        '--tags',
-        type=str,
-        default='',
-        help='视频标签，多个用逗号分隔'
+        "--parallel", "-p", action="store_true", help="并行上传到多个平台"
     )
-    upload_parser.add_argument(
-        '--cover',
-        type=str,
-        help='封面图片路径'
-    )
-    upload_parser.add_argument(
-        '--schedule',
-        type=str,
-        help='定时发布 (小时数 或 "YYYY-MM-DD HH:MM")'
-    )
-    upload_parser.add_argument(
-        '--cookies',
-        type=str,
-        help='Cookie 文件路径'
-    )
-    upload_parser.add_argument(
-        '--parallel', '-p',
-        action='store_true',
-        help='并行上传到多个平台'
-    )
-    upload_parser.add_argument(
-        '--debug',
-        action='store_true',
-        help='调试模式'
-    )
+    upload_parser.add_argument("--debug", action="store_true", help="调试模式")
     upload_parser.set_defaults(func=cmd_upload)
 
     return parser
@@ -502,5 +455,5 @@ def main():
         return 130
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())
