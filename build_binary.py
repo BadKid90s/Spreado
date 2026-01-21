@@ -117,14 +117,29 @@ def build_specific_platform(platform_name, arch, output_dir=None, onefile=True):
 
     clean_build_dirs()
 
+    # 直接使用 PyInstaller 构建
+    entry_point = "spreado/__main__.py"
+    
     build_cmd = [
         sys.executable,
-        "build.py",
-        "--no-archive",
+        "-m",
+        "PyInstaller",
+        "--name", APP_NAME,
+        "--onefile" if onefile else "--onedir",
+        "--clean",
+        "--noconfirm",
+        # 收集 playwright 相关数据
+        "--collect-all", "playwright",
+        "--collect-all", "playwright_stealth",
+        # 隐藏导入
+        "--hidden-import", "spreado.cli.cli",
+        "--hidden-import", "spreado.publisher",
+        "--hidden-import", "spreado.publisher.douyin_uploader",
+        "--hidden-import", "spreado.publisher.xiaohongshu_uploader",
+        "--hidden-import", "spreado.publisher.kuaishou_uploader",
+        "--hidden-import", "spreado.publisher.shipinhao_uploader",
+        entry_point,
     ]
-
-    if not onefile:
-        build_cmd.append("--dir")
 
     print(f"\n执行构建命令: {' '.join(build_cmd)}")
 
@@ -145,7 +160,8 @@ def build_specific_platform(platform_name, arch, output_dir=None, onefile=True):
             dest_path = temp_dir / exe_name
             shutil.copy2(item, dest_path)
             print(f"  复制: {item.name} -> {dest_path.name}")
-            os.chmod(dest_path, 0o755)
+            if current_ext != ".exe":
+                os.chmod(dest_path, 0o755)
             copied = True
             break
 
@@ -163,22 +179,36 @@ def build_specific_platform(platform_name, arch, output_dir=None, onefile=True):
         print("\n✗ 错误: 找不到可执行文件")
         return False
 
-    readme_path = temp_dir / "README.txt"
-    if Path("dist/README.txt").exists():
-        shutil.copy2("dist/README.txt", readme_path)
-        print("  复制: README.txt")
+    # 创建 README.txt
+    readme_content = f"""Spreado v{get_version()} - {platform_name} ({arch})
 
+使用前请先安装 Playwright 浏览器:
+  ./spreado playwright install chromium
+
+或手动安装:
+  playwright install chromium
+
+更多信息请访问: https://github.com/yourname/spreado
+"""
+    readme_path = temp_dir / "README.txt"
+    readme_path.write_text(readme_content, encoding="utf-8")
+    print("  创建: README.txt")
+
+    # 创建安装脚本
     if platform.system() == "Windows":
         install_script = temp_dir / "install_browser.bat"
-        if Path("dist/install_browser.bat").exists():
-            shutil.copy2("dist/install_browser.bat", install_script)
-            print("  复制: install_browser.bat")
+        install_content = "@echo off\necho Installing Playwright Chromium...\nplaywright install chromium\necho Done!\npause\n"
+        install_script.write_text(install_content, encoding="utf-8")
+        print("  创建: install_browser.bat")
     else:
         install_script = temp_dir / "install_browser.sh"
-        if Path("dist/install_browser.sh").exists():
-            shutil.copy2("dist/install_browser.sh", install_script)
-            os.chmod(install_script, 0o755)
-            print("  复制: install_browser.sh")
+        install_content = "#!/bin/bash\necho 'Installing Playwright Chromium...'\nplaywright install chromium\necho 'Done!'\n"
+        install_script.write_text(install_content, encoding="utf-8")
+        os.chmod(install_script, 0o755)
+        print("  创建: install_browser.sh")
+
+    # 确保输出目录存在
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     archive_path = output_dir / f"{pkg_name}.tar.gz"
     with tarfile.open(archive_path, "w:gz") as tar:
