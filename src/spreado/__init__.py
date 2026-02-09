@@ -4,7 +4,7 @@
 Spreado - 全平台内容发布工具
 """
 
-__version__ = "1.0.2"
+__version__ = "1.1.0"
 __author__ = "wangruiyu"
 __email__ = "wry10150@163.com"
 __logo__ = r"""
