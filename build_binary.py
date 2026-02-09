@@ -26,7 +26,7 @@ import argparse
 from pathlib import Path
 
 APP_NAME = "spreado"
-VERSION_FILE = Path("spreado/__version__.py")
+VERSION_FILE = Path("src/spreado/__init__.py")
 
 
 def get_playwright_browser_path():
@@ -205,7 +205,7 @@ def build_specific_platform(platform_name, arch, output_dir=None, onefile=True):
     clean_build_dirs()
 
     # Use PyInstaller directly
-    entry_point = "spreado/__main__.py"
+    entry_point = "src/spreado/__main__.py"
 
     build_cmd = [
         sys.executable,

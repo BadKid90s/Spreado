@@ -17,7 +17,7 @@ from ..publisher.kuaishou_uploader.uploader import KuaiShouUploader
 from ..publisher.shipinhao_uploader.uploader import ShiPinHaoUploader
 from ..utils import get_logger
 
-from ..__version__ import __logo__, __version__, __author__, __email__
+from .. import __logo__, __version__, __author__, __email__
 
 # Logo
 LOGO = r"""

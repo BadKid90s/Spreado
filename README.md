@@ -13,36 +13,44 @@
 
 ## 📋 系统要求
 
-- Python 3.8 或更高版本
+- Python 3.9 或更高版本
 - 操作系统：Windows, macOS, Linux
 - 浏览器：自动检测系统已安装的 Chrome/Edge，或使用 Playwright Chromium
 
 ## 📦 安装指南
 
-### 方式一：通过 PyPI 安装（推荐）
+### 方式一：使用 uv 安装（推荐）
+
+如果你安装了 [uv](https://github.com/astral-sh/uv)，可以极其快速地安装：
 
 ```bash
-# 安装最新版本
+# 作为工具全局安装
+uv tool install spreado
+
+# 或者在项目中使用
+uv add spreado
+```
+
+### 方式二：通过 pip 安装
+
+```bash
 pip install spreado
 ```
 
 > 💡 **无需单独安装浏览器！** Spreado 会自动检测系统已安装的 Chrome 或 Edge 浏览器。如果未检测到，会使用 Playwright 内置的 Chromium。
 
-### 方式二：从源码安装
+### 方式三：从源码安装
 
 ```bash
 # 克隆项目
 git clone https://github.com/BadKid90s/spreado.git
 cd spreado
 
-# 创建虚拟环境（推荐）
-python -m venv .venv
-source .venv/bin/activate  # Linux/macOS
-# 或
-.venv\Scripts\activate     # Windows
+# 使用 uv 环境同步（推荐）
+uv sync
 
-# 安装依赖
-pip install -r requirements.txt
+# 或者使用传统 pip
+pip install .
 ```
 
 ## 🔧 快速开始
@@ -271,29 +279,27 @@ playwright install chromium
 
 如果您需要将项目打包为独立的可执行文件（无需 Python 环境）：
 
-### Windows
+### 各平台通用命令（推荐）
+
+使用 `uv` 可以确保在一个干净的环境中构建：
 
 ```bash
-# 安装 PyInstaller
-pip install pyinstaller
-
-# 执行打包
-python build.py
-
-# 打包后的文件位于 dist/ 目录
+uv run build_binary.py
 ```
 
-### macOS / Linux
+该脚本会：
+1. 自动调用 PyInstaller 进行精简打包。
+2. 将 Playwright 浏览器引擎打包进压缩包。
+3. 在 `dist/` 目录下生成各平台的 `.tar.gz` 压缩包。
+
+### 传统方式
 
 ```bash
 # 安装 PyInstaller
 pip install pyinstaller
 
 # 执行打包
-python build.py
-
-# 赋予执行权限
-chmod +x dist/spreado
+python build_binary.py
 ```
 
 ## 🤝 贡献

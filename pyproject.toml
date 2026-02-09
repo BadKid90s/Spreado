@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "spreado"
-version = "1.0.0"
+dynamic = ["version"]
 description = "全平台内容发布工具 - 支持抖音、小红书、快手、视频号等平台"
 readme = "README.md"
 license = "MIT"
@@ -16,14 +16,13 @@ classifiers = [
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
 keywords = ["video", "upload", "automation", "social-media", "douyin", "xiaohongshu", "kuaishou"]
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 dependencies = [
     "playwright>=1.40.0",
     "playwright-stealth>=2.0.1",
@@ -48,6 +47,8 @@ Homepage = "https://github.com/yourname/spreado"
 Repository = "https://github.com/yourname/spreado"
 Issues = "https://github.com/yourname/spreado/issues"
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["spreado*"]
+[tool.hatch.build.targets.wheel]
+packages = ["src/spreado"]
+
+[tool.hatch.version]
+path = "src/spreado/__init__.py"
