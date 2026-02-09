@@ -93,7 +93,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: spreado-${{ matrix.platform }}-${{ matrix.arch }}
-          path: dist/*.tar.gz
+          path: dist/spreado-*
           retention-days: 1
 
 
@@ -127,6 +127,6 @@ jobs:
         if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
         with:
           tag_name: ${{ steps.release_info.outputs.tag_name }}
-          files: artifacts/*.tar.gz
+          files: artifacts/spreado-*
           draft: ${{ steps.release_info.outputs.is_draft == 'true' }}
           fail_on_unmatched_files: true

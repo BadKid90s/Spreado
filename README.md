@@ -38,11 +38,11 @@
 
 如果你不想安装 Python 环境，可以直接从 GitHub 下载官方编译好的可执行文件：
 
-| 操作系统 | 下载链接 |
-| :--- | :--- |
-| **Windows** | [Download (x64)](https://github.com/BadKid90s/Spreado/releases/latest/download/spreado-windows-x64.exe) \| [Download (ARM64)](https://github.com/BadKid90s/Spreado/releases/latest/download/spreado-windows-arm64.exe) |
-| **macOS** | [Download (Apple Silicon)](https://github.com/BadKid90s/Spreado/releases/latest/download/spreado-macos-arm64) \| [Download (Intel)](https://github.com/BadKid90s/Spreado/releases/latest/download/spreado-macos-x64) |
-| **Linux** | [Download (x64)](https://github.com/BadKid90s/Spreado/releases/latest/download/spreado-linux-x64) \| [Download (ARM64)](https://github.com/BadKid90s/Spreado/releases/latest/download/spreado-linux-arm64) |
+| 操作系统 | 下载链接 | 国内加速 |
+| :--- | :--- | :--- |
+| **Windows** | [Download (x64)](https://github.com/BadKid90s/Spreado/releases/latest/download/spreado-windows-x64.exe) \| [ARM64](https://github.com/BadKid90s/Spreado/releases/latest/download/spreado-windows-arm64.exe) | [🚀 x64](https://gh-proxy.org/https://github.com/BadKid90s/Spreado/releases/latest/download/spreado-windows-x64.exe) \| [ARM64](https://gh-proxy.org/https://github.com/BadKid90s/Spreado/releases/latest/download/spreado-windows-arm64.exe) |
+| **macOS** | [Download (Silicon)](https://github.com/BadKid90s/Spreado/releases/latest/download/spreado-macos-arm64) \| [Intel](https://github.com/BadKid90s/Spreado/releases/latest/download/spreado-macos-x64) | [🚀 Silicon](https://gh-proxy.org/https://github.com/BadKid90s/Spreado/releases/latest/download/spreado-macos-arm64) \| [Intel](https://gh-proxy.org/https://github.com/BadKid90s/Spreado/releases/latest/download/spreado-macos-x64) |
+| **Linux** | [Download (x64)](https://github.com/BadKid90s/Spreado/releases/latest/download/spreado-linux-x64) \| [ARM64](https://github.com/BadKid90s/Spreado/releases/latest/download/spreado-linux-arm64) | [🚀 x64](https://gh-proxy.org/https://github.com/BadKid90s/Spreado/releases/latest/download/spreado-linux-x64) \| [ARM64](https://gh-proxy.org/https://github.com/BadKid90s/Spreado/releases/latest/download/spreado-linux-arm64) |
 
 > 更多版本请前往 [GitHub Releases](https://github.com/BadKid90s/Spreado/releases) 页面。
 
