@@ -2,9 +2,9 @@ import asyncio
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from ..conf import BASE_DIR
-from ..publisher.xiaohongshu_uploader import XiaoHongShuUploader
-from ..utils.files_times import get_title_and_hashtags
+from spreado.conf import BASE_DIR
+from spreado.publisher.xiaohongshu_uploader import XiaoHongShuUploader
+from spreado.utils.files_times import get_title_and_hashtags
 
 
 async def main():
