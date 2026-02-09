@@ -453,28 +453,32 @@ class XiaoHongShuUploader(BaseUploader):
 
             # 1. 开启定时发布开关
             # 精确定位：包含“定时发布”文字的容器下的 .d-switch
-            switch_container = page.locator(".post-time-switch-container:has-text('定时发布')")
+            switch_container = page.locator(
+                ".post-time-switch-container:has-text('定时发布')"
+            )
             switch = switch_container.locator(".d-switch").first
-            
+
             if await switch.count() == 0:
                 switch = page.locator("div:has-text('定时发布') >> .d-switch").first
 
             if await switch.count() > 0:
                 await switch.scroll_into_view_if_needed()
-                
+
                 # 极其稳健的状态检测：通过 JS 获取 input 的 checked 属性
                 # 这比检查类名更准确，能防止“打开后又关闭”的现象
                 is_checked = await switch.locator("input").evaluate("el => el.checked")
                 self.logger.debug(f"[DEBUG] 定时发布开关当前状态: {is_checked}")
-                
+
                 if not is_checked:
                     self.logger.info("[-] 定时发布未开启，正在执行开启操作...")
                     # 点击 simulator 元素通常比点击外部容器更稳定
                     await switch.locator(".d-switch-simulator").click(force=True)
-                    
+
                     # 等待并验证状态更新
                     await page.wait_for_timeout(1000)
-                    is_checked_now = await switch.locator("input").evaluate("el => el.checked")
+                    is_checked_now = await switch.locator("input").evaluate(
+                        "el => el.checked"
+                    )
                     self.logger.debug(f"[DEBUG] 点击后开关状态: {is_checked_now}")
                 else:
                     self.logger.info("[+] 定时发布已处于开启状态，跳过点击")
@@ -485,21 +489,28 @@ class XiaoHongShuUploader(BaseUploader):
             # 只有开关打开后，.date-picker-container 才会显示
             try:
                 self.logger.debug("[-] 等待日期选择器容器渲染...")
-                await page.wait_for_selector(".date-picker-container", state="visible", timeout=5000)
+                await page.wait_for_selector(
+                    ".date-picker-container", state="visible", timeout=5000
+                )
             except Exception:
-                self.logger.warning("[!] 未检测到 .date-picker-container 出现，可能开关未成功开启或页面加载缓慢")
+                self.logger.warning(
+                    "[!] 未检测到 .date-picker-container 出现，可能开关未成功开启或页面加载缓慢"
+                )
 
             # 3. 设置时间
             # 优先使用 .date-picker-container 下的输入框
             input_selector = ".date-picker-container .d-text, .d-datepicker-input-filter input, .d-datepicker-input-filter"
             datetime_elem = page.locator(input_selector).first
-            
+
             if await datetime_elem.count() > 0:
                 await datetime_elem.wait_for(state="visible", timeout=5000)
                 # 统一使用 fill 设置值，如果不是 input 则尝试内部寻找
-                target_input = datetime_elem if await datetime_elem.evaluate("el => el.tagName === 'INPUT'") \
-                               else datetime_elem.locator("input").first
-                
+                target_input = (
+                    datetime_elem
+                    if await datetime_elem.evaluate("el => el.tagName === 'INPUT'")
+                    else datetime_elem.locator("input").first
+                )
+
                 await target_input.click(force=True)
                 # await page.keyboard.press("Control+KeyA")
                 # await page.keyboard.press("Backspace")
@@ -530,10 +541,12 @@ class XiaoHongShuUploader(BaseUploader):
         success_pattern = re.compile(r"/success|published=true")
 
         # 尝试多种选择器定位发布按钮
-        publish_button = page.get_by_role("button", name=re.compile("发布|定时发布")).first
+        publish_button = page.get_by_role(
+            "button", name=re.compile("发布|定时发布")
+        ).first
 
         if await publish_button.count() > 0 and await publish_button.is_visible():
-            self.logger.debug(f"[DEBUG] 找到发布按钮")
+            self.logger.debug("[DEBUG] 找到发布按钮")
 
         if not publish_button:
             self.logger.error("[!] 未找到发布按钮，尝试通过通用文本查找")

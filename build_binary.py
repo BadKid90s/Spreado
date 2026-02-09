@@ -18,7 +18,6 @@ Usage:
 
 import os
 import sys
-import tarfile
 import shutil
 import subprocess
 import platform
@@ -378,20 +377,20 @@ export PLAYWRIGHT_BROWSERS_PATH="$SCRIPT_DIR/browser"
 
     # Ensure output directory exists
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Define final executable name without version
     final_exe_name = f"{APP_NAME}-{platform_name}-{arch}{current_ext}"
     final_output = output_dir / final_exe_name
-    
+
     print(f"\n  Finalizing: {final_exe_name}")
-    
+
     if final_output.exists():
         final_output.unlink()
-            
+
     # Copy the executable from temp_dir to dist/
     exe_in_temp = temp_dir / exe_name
     shutil.copy2(exe_in_temp, final_output)
-    
+
     if current_ext != ".exe":
         os.chmod(final_output, 0o755)
 
