@@ -11,6 +11,21 @@
 - **命令行界面**: 简单易用的CLI工具
 - **程序接口**: 支持Python API集成
 
+## 🤖 Agent Skill
+
+我们为 AI Agent (如 Claude, Antigravity，OpenCode, Codex, Cursor, Windsurf) 提供了专门的 Skill 支持，可以更智能地协助您进行安装、配置和视频发布。
+
+### 获取 Skill
+您可以下载打包好的 `.skill` 文件并导入到您的 AI 助手：
+
+- **下载链接**: [spreado-skill](./skills/spreado-skill)
+- **源码位置**: `./skills/spreado-skill`
+
+### 支持的功能
+- **智能安装**: 自动根据环境推荐最合适的安装方式（二进制或 Python）。
+- **流程引导**: 引导完成多平台登录认证和状态校验。
+- **发布助手**: 协同处理视频上传、元数据配置及定时任务。
+
 ## 📋 系统要求
 
 - Python 3.9 或更高版本
@@ -317,6 +332,7 @@ python build_binary.py
 ## 🤝 贡献
 
 欢迎提交 Issue 和 Pull Request 来帮助改进这个项目！
+
 
 ## 📄 许可证
 
