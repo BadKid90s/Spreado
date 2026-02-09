@@ -19,7 +19,19 @@
 
 ## 📦 安装指南
 
-### 方式一：使用 uv 安装（推荐）
+### 方式一：下载可执行文件（最简单）
+
+如果你不想安装 Python 环境，可以直接从 GitHub 下载官方编译好的可执行文件：
+
+| 操作系统 | 下载链接 |
+| :--- | :--- |
+| **Windows** | [Download (x64)](https://github.com/BadKid90s/Spreado/releases/latest/download/spreado-windows-x64.exe) \| [Download (ARM64)](https://github.com/BadKid90s/Spreado/releases/latest/download/spreado-windows-arm64.exe) |
+| **macOS** | [Download (Apple Silicon)](https://github.com/BadKid90s/Spreado/releases/latest/download/spreado-macos-arm64) \| [Download (Intel)](https://github.com/BadKid90s/Spreado/releases/latest/download/spreado-macos-x64) |
+| **Linux** | [Download (x64)](https://github.com/BadKid90s/Spreado/releases/latest/download/spreado-linux-x64) \| [Download (ARM64)](https://github.com/BadKid90s/Spreado/releases/latest/download/spreado-linux-arm64) |
+
+> 更多版本请前往 [GitHub Releases](https://github.com/BadKid90s/Spreado/releases) 页面。
+
+### 方式二：使用 uv 安装（推荐）
 
 如果你安装了 [uv](https://github.com/astral-sh/uv)，可以极其快速地安装：
 

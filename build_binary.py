@@ -195,7 +195,7 @@ def build_specific_platform(platform_name, arch, output_dir=None, onefile=True):
     if output_dir is None:
         output_dir = Path("dist")
 
-    pkg_name = f"{APP_NAME}-{get_version()}-{platform_name}-{arch}"
+    pkg_name = f"{APP_NAME}-{platform_name}-{arch}"
     temp_dir = Path(f"build/{pkg_name}")
 
     print(f"\n{'='*60}")
@@ -378,29 +378,28 @@ export PLAYWRIGHT_BROWSERS_PATH="$SCRIPT_DIR/browser"
 
     # Ensure output directory exists
     output_dir.mkdir(parents=True, exist_ok=True)
-
-    archive_path = output_dir / f"{pkg_name}.tar.gz"
-    print(f"\n  Creating archive: {archive_path.name}")
-
-    with tarfile.open(archive_path, "w:gz") as tar:
-        for item in temp_dir.iterdir():
-            if item.is_dir():
-                # For directories (like browser), add with directory structure
-                print(f"  Packing directory: {item.name}/ (this may take a while...)")
-                tar.add(item, arcname=item.name)
-            else:
-                tar.add(item, arcname=item.name)
-                print(f"  Packed: {item.name}")
-
-    # Show final archive size
-    archive_size = archive_path.stat().st_size / (1024 * 1024)
-    print(f"  Archive size: {archive_size:.1f} MB")
+    
+    # Define final executable name without version
+    final_exe_name = f"{APP_NAME}-{platform_name}-{arch}{current_ext}"
+    final_output = output_dir / final_exe_name
+    
+    print(f"\n  Finalizing: {final_exe_name}")
+    
+    if final_output.exists():
+        final_output.unlink()
+            
+    # Copy the executable from temp_dir to dist/
+    exe_in_temp = temp_dir / exe_name
+    shutil.copy2(exe_in_temp, final_output)
+    
+    if current_ext != ".exe":
+        os.chmod(final_output, 0o755)
 
     shutil.rmtree(temp_dir)
     print(f"\n[OK] {platform_name} ({arch}) build completed")
-    print(f"  Output: {archive_path}")
+    print(f"  Output: {final_output}")
 
-    return archive_path
+    return final_output
 
 
 def build_current_platform():
