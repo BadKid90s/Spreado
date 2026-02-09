@@ -52,3 +52,8 @@ packages = ["src/spreado"]
 
 [tool.hatch.version]
 path = "src/spreado/__init__.py"
+
+[dependency-groups]
+dev = [
+    "pyinstaller>=6.18.0",
+]

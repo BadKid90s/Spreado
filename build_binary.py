@@ -85,7 +85,7 @@ def copy_chromium_to_package(temp_dir: Path):
 
     try:
         # Copy entire chromium directory
-        shutil.copytree(chromium_path, browser_dest / chromium_path.name)
+        shutil.copytree(chromium_path, browser_dest / chromium_path.name, symlinks=True)
 
         # Get size
         total_size = sum(
