@@ -163,7 +163,7 @@ class XiaoHongShuUploader(BaseUploader):
         try:
             # 使用更准确的选择器来定位上传输入框
             upload_input = page.locator("input.upload-input")
-            await upload_input.wait_for(state="visible", timeout=10000)
+            await upload_input.wait_for(state="attached", timeout=10000)
             await upload_input.set_input_files(file_path)
             return True
         except Exception as e:
@@ -446,64 +446,72 @@ class XiaoHongShuUploader(BaseUploader):
     async def _set_schedule_time(self, page: Page, publish_date: datetime) -> bool:
         """
         设置定时发布时间
-
-        Args:
-            page: 页面实例
-            publish_date: 发布时间
-
-        Returns:
-            是否成功设置定时发布时间
         """
         try:
             self.logger.info("[-] 正在设置定时发布时间...")
-            # 先尝试关闭可能存在的模态框
-            try:
-                modal_mask = page.locator(".d-modal-mask")
-                if await modal_mask.count() > 0:
-                    self.logger.debug("[DEBUG] 检测到模态框，尝试关闭...")
-                    # 点击模态框外部关闭它
-                    await page.click("body", force=True)
+            publish_date_str = publish_date.strftime("%Y-%m-%d %H:%M")
+
+            # 1. 开启定时发布开关
+            # 精确定位：包含“定时发布”文字的容器下的 .d-switch
+            switch_container = page.locator(".post-time-switch-container:has-text('定时发布')")
+            switch = switch_container.locator(".d-switch").first
+            
+            if await switch.count() == 0:
+                switch = page.locator("div:has-text('定时发布') >> .d-switch").first
+
+            if await switch.count() > 0:
+                await switch.scroll_into_view_if_needed()
+                
+                # 极其稳健的状态检测：通过 JS 获取 input 的 checked 属性
+                # 这比检查类名更准确，能防止“打开后又关闭”的现象
+                is_checked = await switch.locator("input").evaluate("el => el.checked")
+                self.logger.debug(f"[DEBUG] 定时发布开关当前状态: {is_checked}")
+                
+                if not is_checked:
+                    self.logger.info("[-] 定时发布未开启，正在执行开启操作...")
+                    # 点击 simulator 元素通常比点击外部容器更稳定
+                    await switch.locator(".d-switch-simulator").click(force=True)
+                    
+                    # 等待并验证状态更新
                     await page.wait_for_timeout(1000)
-            except Exception as e:
-                self.logger.debug(f"[DEBUG] 关闭模态框时出错: {e}")
+                    is_checked_now = await switch.locator("input").evaluate("el => el.checked")
+                    self.logger.debug(f"[DEBUG] 点击后开关状态: {is_checked_now}")
+                else:
+                    self.logger.info("[+] 定时发布已处于开启状态，跳过点击")
+            else:
+                self.logger.warning("[!] 未找到定时发布开关")
 
-            label_element = page.locator("label:has-text('定时发布')")
-            await label_element.scroll_into_view_if_needed()
-            await label_element.click(force=True, timeout=10000)
-        except Exception as e:
-            self.logger.warning(f"[!] 点击定时发布标签时出错: {e}，尝试其他方式")
+            # 2. 等待日期选择器容器出现
+            # 只有开关打开后，.date-picker-container 才会显示
             try:
-                radio_element = page.locator(".el-radio__label:has-text('定时发布')")
-                await radio_element.scroll_into_view_if_needed()
-                await radio_element.click(force=True, timeout=5000)
-            except Exception as e2:
-                self.logger.warning(f"[!] 无法点击定时发布标签: {e2}，跳过定时发布设置")
+                self.logger.debug("[-] 等待日期选择器容器渲染...")
+                await page.wait_for_selector(".date-picker-container", state="visible", timeout=5000)
+            except Exception:
+                self.logger.warning("[!] 未检测到 .date-picker-container 出现，可能开关未成功开启或页面加载缓慢")
+
+            # 3. 设置时间
+            # 优先使用 .date-picker-container 下的输入框
+            input_selector = ".date-picker-container .d-text, .d-datepicker-input-filter input, .d-datepicker-input-filter"
+            datetime_elem = page.locator(input_selector).first
+            
+            if await datetime_elem.count() > 0:
+                await datetime_elem.wait_for(state="visible", timeout=5000)
+                # 统一使用 fill 设置值，如果不是 input 则尝试内部寻找
+                target_input = datetime_elem if await datetime_elem.evaluate("el => el.tagName === 'INPUT'") \
+                               else datetime_elem.locator("input").first
+                
+                await target_input.click(force=True)
+                # await page.keyboard.press("Control+KeyA")
+                # await page.keyboard.press("Backspace")
+                await target_input.fill(publish_date_str)
+                await page.keyboard.press("Enter")
+                self.logger.info(f"[+] 定时发布时间设置完成: {publish_date_str}")
+                await page.wait_for_timeout(500)
                 return True
+            else:
+                self.logger.error("[!] 未找到日期时间输入框")
+                return False
 
-        try:
-            await page.wait_for_selector(
-                '.el-input__inner[placeholder="选择日期和时间"]',
-                state="visible",
-                timeout=5000,
-            )
-        except Exception as e:
-            self.logger.warning(f"[!] 等待日期时间输入框时出错: {e}，跳过定时发布设置")
-            return True
-
-        try:
-            publish_date_hour = publish_date.strftime("%Y-%m-%d %H:%M")
-            self.logger.info(f"publish_date_hour: {publish_date_hour}")
-
-            # 直接使用fill方法设置日期时间值，更可靠和高效
-            datetime_input = page.locator(
-                '.el-input__inner[placeholder="选择日期和时间"]'
-            )
-            await datetime_input.fill(publish_date_hour)
-            await page.keyboard.press("Enter")
-            await page.wait_for_timeout(500)
-
-            self.logger.info("[+] 定时发布时间设置完成")
-            return True
         except Exception as e:
             self.logger.error(f"[!] 设置定时发布时间时出错: {e}")
             return False
@@ -521,11 +529,18 @@ class XiaoHongShuUploader(BaseUploader):
         is_published = False
         success_pattern = re.compile(r"/success|published=true")
 
-        # 精确定位发布按钮
-        publish_button = page.locator("button.publishBtn")
+        # 尝试多种选择器定位发布按钮
+        publish_button = page.get_by_role("button", name=re.compile("发布|定时发布")).first
+
+        if await publish_button.count() > 0 and await publish_button.is_visible():
+            self.logger.debug(f"[DEBUG] 找到发布按钮")
+
+        if not publish_button:
+            self.logger.error("[!] 未找到发布按钮，尝试通过通用文本查找")
+            return False
 
         try:
-            # 确保按钮可见
+            # 确保按钮可见并可以点击
             await publish_button.scroll_into_view_if_needed()
             await publish_button.wait_for(state="visible", timeout=10_000)
 
