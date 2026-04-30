@@ -4,7 +4,7 @@ from pathlib import Path
 import asyncio
 
 from spreado.conf import BASE_DIR
-from spreado.publisher.kuaishou_uploader import KuaiShouUploader
+from spreado.plugins.kuaishou import KuaiShouUploader
 from spreado.utils.files_times import get_title_and_hashtags
 
 

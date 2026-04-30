@@ -4,7 +4,7 @@ from typing import List, Optional
 
 from playwright.async_api import Page, Error
 
-from ...publisher.base_publisher import BasePublisher
+from spreado.core.base_publisher import BasePublisher
 
 
 def _format_str_for_short_title(origin_title: str) -> str:

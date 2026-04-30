@@ -13,7 +13,7 @@ from typing import List, Optional
 
 from playwright.async_api import Page
 
-from spreado.publisher.base_publisher import BasePublisher
+from spreado.core.base_publisher import BasePublisher
 
 
 class BilibiliUploader(BasePublisher):

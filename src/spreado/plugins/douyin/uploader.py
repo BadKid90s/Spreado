@@ -5,7 +5,7 @@ import time
 
 from playwright.async_api import Page, Error
 import asyncio
-from ...publisher.base_publisher import BasePublisher
+from spreado.core.base_publisher import BasePublisher
 
 
 class DouYinUploader(BasePublisher):

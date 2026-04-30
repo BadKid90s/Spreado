@@ -16,8 +16,8 @@ __logo__ = r"""
  |_____/|_|    |_|  \_\______/_/    \_\_____/ \____/
 """
 
-from spreado.publisher.uploader import BaseUploader
-from spreado.publisher.base_publisher import BasePublisher
+from spreado.core.uploader import BaseUploader
+from spreado.core.base_publisher import BasePublisher
 from spreado.plugin_loader import PluginLoader, get_plugin_loader
 from spreado.account_manager import AccountManager
 from spreado.models.task import Task

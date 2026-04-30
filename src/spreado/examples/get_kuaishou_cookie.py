@@ -1,6 +1,6 @@
 import asyncio
 
-from spreado.publisher.kuaishou_uploader import KuaiShouUploader
+from spreado.plugins.kuaishou import KuaiShouUploader
 
 
 async def main():

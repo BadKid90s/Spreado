@@ -1,6 +1,6 @@
 import asyncio
 
-from spreado.publisher.douyin_uploader import DouYinUploader
+from spreado.plugins.douyin import DouYinUploader
 
 
 async def main():

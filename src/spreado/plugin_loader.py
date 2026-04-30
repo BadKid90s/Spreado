@@ -7,23 +7,21 @@
 """
 
 import importlib
-import importlib.util
 import inspect
 import logging
-from pathlib import Path
 from typing import Dict, Type, Optional, List
 
-from .publisher.base_publisher import BasePublisher
+from .core.base_publisher import BasePublisher
 from .conf import PLUGINS_DIR
 
 logger = logging.getLogger("spreado.plugin_loader")
 
-# 内置上传器模块路径 (在 publisher/ 下)
+# 内置上传器模块路径 (在 plugins/ 下)
 _BUILTIN_MODULES = [
-    "spreado.publisher.douyin_uploader.uploader",
-    "spreado.publisher.xiaohongshu_uploader.uploader",
-    "spreado.publisher.kuaishou_uploader.uploader",
-    "spreado.publisher.shipinhao_uploader.uploader",
+    "spreado.plugins.douyin.uploader",
+    "spreado.plugins.xiaohongshu.uploader",
+    "spreado.plugins.kuaishou.uploader",
+    "spreado.plugins.shipinhao.uploader",
 ]
 
 
@@ -33,8 +31,8 @@ class PluginLoader:
 
     自动发现并管理所有 BasePublisher 子类。
     扫描来源:
-    1. 内置上传器 (publisher/ 下的各平台子包)
-    2. 外部插件目录 (plugins/)
+    1. 内置上传器 (plugins/ 下的各平台子目录)
+    2. 外部插件目录 (plugins/ 下的子目录)
     """
 
     def __init__(self):
@@ -55,12 +53,15 @@ class PluginLoader:
         for module_path in _BUILTIN_MODULES:
             self._load_module(module_path)
 
-        # 2. 加载外部插件目录
+        # 2. 加载外部插件目录 (子目录中的 uploader.py)
         if PLUGINS_DIR.exists():
-            for py_file in sorted(PLUGINS_DIR.glob("*.py")):
-                if py_file.name.startswith("_"):
+            for sub_dir in sorted(PLUGINS_DIR.iterdir()):
+                if not sub_dir.is_dir() or sub_dir.name.startswith("_"):
                     continue
-                self._load_plugin_file(py_file)
+                uploader_file = sub_dir / "uploader.py"
+                if uploader_file.exists():
+                    module_name = f"spreado.plugins.{sub_dir.name}.uploader"
+                    self._load_module(module_name)
 
         self._loaded = True
         logger.info(f"已加载 {len(self._publishers)} 个平台插件: {list(self._publishers.keys())}")
@@ -72,19 +73,6 @@ class PluginLoader:
             self._discover_publishers(module)
         except Exception as e:
             logger.warning(f"加载模块失败 {module_path}: {e}")
-
-    def _load_plugin_file(self, file_path: Path) -> None:
-        """通过文件路径加载外部插件"""
-        try:
-            # 构造模块名: spreado.plugins.<filename_without_ext>
-            module_name = f"spreado.plugins.{file_path.stem}"
-            spec = importlib.util.spec_from_file_location(module_name, file_path)
-            if spec and spec.loader:
-                module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(module)
-                self._discover_publishers(module)
-        except Exception as e:
-            logger.warning(f"加载插件失败 {file_path}: {e}")
 
     def _discover_publishers(self, module) -> None:
         """从模块中发现 BasePublisher 子类"""
