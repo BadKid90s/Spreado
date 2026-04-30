@@ -28,7 +28,7 @@
 
 ## 📋 系统要求
 
-- Python 3.9 或更高版本
+- Python **3.9** 或更高版本（推荐 3.10+）
 - 操作系统：Windows, macOS, Linux
 - 浏览器：自动检测系统已安装的 Chrome/Edge，或使用 Playwright Chromium
 
@@ -170,16 +170,27 @@ spreado upload --help
 
 ```
 cookies/
-├── douyin_uploader/account.json
-├── xiaohongshu_uploader/account.json
-├── kuaishou_uploader/account.json
-└── shipinhao_uploader/account.json
+├── douyin/
+│   └── default/
+│       └── account.json
+├── xiaohongshu/
+│   └── default/
+│       └── account.json
+├── kuaishou/
+│   └── default/
+│       └── account.json
+└── shipinhao/
+    └── default/
+        └── account.json
 ```
+
+> 多账号支持：使用 `--cookies` 参数可指定自定义路径，或在目录中使用不同账号名替换 `default`。
 
 ### 自定义 Cookie 路径
 
 ```bash
-spreado upload douyin --video video.mp4 --title "标题" --cookies /path/to/cookies/
+# 指定自定义 Cookie 文件路径
+spreado upload douyin --video video.mp4 --title "标题" --cookies /path/to/cookies/douyin/myaccount/account.json
 ```
 
 ## 🐍 Python API 使用示例
@@ -187,13 +198,13 @@ spreado upload douyin --video video.mp4 --title "标题" --cookies /path/to/cook
 ```python
 import asyncio
 from pathlib import Path
-from spreado.publisher.douyin_uploader import DouYinUploader
+from spreado.plugins.douyin.uploader import DouYinUploader
 
 
 async def upload_video():
     # 初始化上传器
     uploader = DouYinUploader(
-        cookie_file_path=Path("cookies/douyin_uploader/account.json")
+        cookie_file_path=Path("cookies/douyin/default/account.json")
     )
 
     # 上传视频
