@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 """
 Spreado CLI 命令行工具 (异步版本)
+
+重构版本：使用 PluginLoader 动态发现插件，不再硬编码平台映射。
 """
 
 import argparse
@@ -9,12 +11,9 @@ import sys
 import asyncio
 from pathlib import Path
 from datetime import datetime, timedelta
-from typing import Dict, Type, List
+from typing import List
 
-from ..publisher.douyin_uploader.uploader import DouYinUploader
-from ..publisher.xiaohongshu_uploader.uploader import XiaoHongShuUploader
-from ..publisher.kuaishou_uploader.uploader import KuaiShouUploader
-from ..publisher.shipinhao_uploader.uploader import ShiPinHaoUploader
+from ..plugin_loader import get_plugin_loader
 from ..utils import get_logger
 
 from .. import __logo__, __version__, __author__, __email__
@@ -26,47 +25,44 @@ LOGO = r"""
            全平台内容发布工具 v{}
            作者: {}
            邮箱: {}
-""".format(__logo__, __version__, __author__, __email__)
-
-# 平台映射
-UPLOADERS: Dict[str, Type] = {
-    "douyin": DouYinUploader,
-    "xiaohongshu": XiaoHongShuUploader,
-    "kuaishou": KuaiShouUploader,
-    "shipinhao": ShiPinHaoUploader,
-}
-
-PLATFORM_NAMES = {
-    "douyin": "抖音",
-    "xiaohongshu": "小红书",
-    "kuaishou": "快手",
-    "shipinhao": "视频号",
-}
+""".format(
+    __logo__, __version__, __author__, __email__
+)
 
 
-def get_uploader(platform: str, cookies: str = None):
-    """获取上传器实例"""
-    uploader_class = UPLOADERS.get(platform)
-    if not uploader_class:
+def _get_platform_names() -> dict:
+    """动态获取平台名映射 {platform_name: display_name}"""
+    loader = get_plugin_loader()
+    return loader.list_publishers()
+
+
+def _get_platform_choices(include_all: bool = False) -> List[str]:
+    """动态获取平台 choices 列表"""
+    loader = get_plugin_loader()
+    names = loader.list_publisher_names()
+    if include_all:
+        names = names + ["all"]
+    return names
+
+
+def get_publisher(platform: str, cookies: str = None):
+    """获取发布器实例"""
+    loader = get_plugin_loader()
+    publisher = loader.get_publisher(platform, cookie_file_path=cookies)
+    if not publisher:
         raise ValueError(f"不支持的平台: {platform}")
-
-    return uploader_class(
-        cookie_file_path=cookies,
-    )
+    return publisher
 
 
 async def login_single_platform(platform: str, args, logger) -> bool:
     """登录单个平台"""
-    platform_name = PLATFORM_NAMES.get(platform, platform)
+    platform_names = _get_platform_names()
+    platform_name = platform_names.get(platform, platform)
     logger.info(f"登录平台: {platform_name}")
 
     try:
-        uploader = get_uploader(
-            platform=platform,
-            cookies=args.cookies,
-        )
-
-        result = await uploader.login_flow()
+        publisher = get_publisher(platform=platform, cookies=args.cookies)
+        result = await publisher.login_flow()
 
         if result:
             logger.info(f"✓ {platform_name} 登录成功")
@@ -88,9 +84,9 @@ async def cmd_login(args):
     """登录命令"""
     logger = get_logger("LOGIN")
 
-    # 只登录指定的平台
     platform = args.platform
-    platform_name = PLATFORM_NAMES.get(platform, platform)
+    platform_names = _get_platform_names()
+    platform_name = platform_names.get(platform, platform)
 
     print(f"\n{'=' * 50}")
     print(f"登录平台: {platform_name}")
@@ -110,15 +106,12 @@ async def cmd_login(args):
 
 async def verify_single_platform(platform: str, args, logger) -> bool:
     """验证单个平台 Cookie"""
-    platform_name = PLATFORM_NAMES.get(platform, platform)
+    platform_names = _get_platform_names()
+    platform_name = platform_names.get(platform, platform)
 
     try:
-        uploader = get_uploader(
-            platform=platform,
-            cookies=args.cookies,
-        )
-
-        result = await uploader.verify_cookie_flow()
+        publisher = get_publisher(platform=platform, cookies=args.cookies)
+        result = await publisher.verify_cookie_flow()
 
         if result:
             logger.info(f"✓ {platform_name} Cookie 有效")
@@ -140,21 +133,19 @@ async def cmd_verify(args):
     """验证 Cookie 命令"""
     logger = get_logger("VERIFY")
 
-    platforms = list(UPLOADERS.keys()) if args.platform == "all" else [args.platform]
+    loader = get_plugin_loader()
+    platforms = loader.list_publisher_names() if args.platform == "all" else [args.platform]
 
     print(f"\n{'=' * 50}")
     print("验证 Cookie 状态")
     print(f"{'=' * 50}")
 
     if args.parallel and len(platforms) > 1:
-        # 并行验证
         tasks = [verify_single_platform(p, args, logger) for p in platforms]
         results = await asyncio.gather(*tasks, return_exceptions=True)
-
         success_count = sum(1 for r in results if r is True)
         fail_count = len(results) - success_count
     else:
-        # 串行验证
         success_count = 0
         fail_count = 0
         for platform in platforms:
@@ -183,16 +174,14 @@ async def upload_single_platform(
     logger,
 ) -> bool:
     """上传到单个平台"""
-    platform_name = PLATFORM_NAMES.get(platform, platform)
+    platform_names = _get_platform_names()
+    platform_name = platform_names.get(platform, platform)
     logger.info(f"开始上传到: {platform_name}")
 
     try:
-        uploader = get_uploader(
-            platform=platform,
-            cookies=args.cookies,
-        )
+        publisher = get_publisher(platform=platform, cookies=args.cookies)
 
-        result = await uploader.upload_video_flow(
+        result = await publisher.upload_video_flow(
             file_path=video_path,
             title=title,
             content=content,
@@ -221,13 +210,11 @@ async def cmd_upload(args):
     """上传视频命令"""
     logger = get_logger("UPLOAD")
 
-    # 验证视频文件
     video_path = Path(args.video)
     if not video_path.exists():
         logger.error(f"视频文件不存在: {args.video}")
         return 1
 
-    # 验证封面文件
     thumbnail_path = None
     if args.cover:
         thumbnail_path = Path(args.cover)
@@ -235,12 +222,10 @@ async def cmd_upload(args):
             logger.error(f"封面文件不存在: {args.cover}")
             return 1
 
-    # 解析标签
     tags = []
     if args.tags:
         tags = [tag.strip() for tag in args.tags.split(",") if tag.strip()]
 
-    # 解析发布时间
     publish_date = None
     if args.schedule:
         try:
@@ -254,10 +239,10 @@ async def cmd_upload(args):
             logger.info("支持格式: 数字(小时) 或 'YYYY-MM-DD HH:MM'")
             return 1
 
-    # 选择平台
-    platforms = list(UPLOADERS.keys()) if args.platform == "all" else [args.platform]
+    loader = get_plugin_loader()
+    platforms = loader.list_publisher_names() if args.platform == "all" else [args.platform]
+    platform_names = _get_platform_names()
 
-    # 显示上传信息
     print(f"\n{'=' * 50}")
     print("上传任务")
     print(f"{'=' * 50}")
@@ -268,11 +253,10 @@ async def cmd_upload(args):
     print(
         f"  定时: {publish_date.strftime('%Y-%m-%d %H:%M') if publish_date else '立即发布'}"
     )
-    print(f"  平台: {', '.join(PLATFORM_NAMES.get(p, p) for p in platforms)}")
+    print(f"  平台: {', '.join(platform_names.get(p, p) for p in platforms)}")
     print(f"{'=' * 50}\n")
 
     if args.parallel and len(platforms) > 1:
-        # 并行上传
         logger.info("使用并行模式上传...")
         tasks = [
             upload_single_platform(
@@ -289,11 +273,9 @@ async def cmd_upload(args):
             for p in platforms
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
-
         success_count = sum(1 for r in results if r is True)
         fail_count = len(results) - success_count
     else:
-        # 串行上传
         success_count = 0
         fail_count = 0
         for platform in platforms:
@@ -321,6 +303,26 @@ async def cmd_upload(args):
     return 0 if fail_count == 0 else 1
 
 
+async def cmd_list(args):
+    """列出所有可用平台插件"""
+    loader = get_plugin_loader()
+    publishers = loader.list_publishers()
+
+    print(f"\n{'=' * 50}")
+    print("已注册的平台插件")
+    print(f"{'=' * 50}")
+
+    if not publishers:
+        print("  (无)")
+    else:
+        for name, display in sorted(publishers.items()):
+            print(f"  {name:15s} -- {display}")
+
+    print(f"\n  共 {len(publishers)} 个平台插件")
+    print(f"{'=' * 50}\n")
+    return 0
+
+
 def create_parser():
     """创建命令行解析器"""
     parser = argparse.ArgumentParser(
@@ -329,6 +331,9 @@ def create_parser():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
+  # 列出可用平台
+  spreado list
+
   # 登录平台
   spreado login douyin
 
@@ -346,13 +351,20 @@ def create_parser():
         "-v", "--version", action="version", version=f"Spreado {__version__}"
     )
 
-    # 子命令
     subparsers = parser.add_subparsers(
         dest="command",
         title="命令",
         description="可用命令",
         help="使用 spreado <命令> --help 查看详细帮助",
     )
+
+    # ==================== list 命令 ====================
+    list_parser = subparsers.add_parser(
+        "list",
+        help="列出所有可用平台插件",
+        description="列出所有已注册的平台插件",
+    )
+    list_parser.set_defaults(func=cmd_list)
 
     # ==================== login 命令 ====================
     login_parser = subparsers.add_parser(
@@ -362,7 +374,7 @@ def create_parser():
     )
     login_parser.add_argument(
         "platform",
-        choices=["douyin", "xiaohongshu", "kuaishou", "shipinhao"],
+        choices=_get_platform_choices(include_all=False),
         help="目标平台",
     )
     login_parser.add_argument("--cookies", type=str, help="Cookie 保存路径")
@@ -377,7 +389,7 @@ def create_parser():
     )
     verify_parser.add_argument(
         "platform",
-        choices=["douyin", "xiaohongshu", "kuaishou", "shipinhao", "all"],
+        choices=_get_platform_choices(include_all=True),
         help="目标平台 (all 表示所有平台)",
     )
     verify_parser.add_argument("--cookies", type=str, help="Cookie 文件路径")
@@ -393,7 +405,7 @@ def create_parser():
     )
     upload_parser.add_argument(
         "platform",
-        choices=["douyin", "xiaohongshu", "kuaishou", "shipinhao", "all"],
+        choices=_get_platform_choices(include_all=True),
         help="目标平台 (all 表示所有平台)",
     )
     upload_parser.add_argument(
@@ -427,23 +439,19 @@ async def async_main():
     parser = create_parser()
     args = parser.parse_args()
 
-    # 没有输入命令时显示帮助
     if not args.command:
         parser.print_help()
         return 0
 
-    # 执行对应命令（异步）
     return await args.func(args)
 
 
 def main():
     """主函数入口"""
     try:
-        # Python 3.10+ 推荐方式
         if sys.version_info >= (3, 10):
             return asyncio.run(async_main())
         else:
-            # 兼容旧版本
             loop = asyncio.get_event_loop()
             try:
                 return loop.run_until_complete(async_main())

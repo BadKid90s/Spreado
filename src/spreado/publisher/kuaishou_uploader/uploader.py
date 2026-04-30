@@ -4,10 +4,10 @@ from typing import List, Optional
 
 from playwright.async_api import Page, Error
 
-from ...publisher.uploader import BaseUploader
+from ...publisher.base_publisher import BasePublisher
 
 
-class KuaiShouUploader(BaseUploader):
+class KuaiShouUploader(BasePublisher):
     """
     快手视频上传器
     """
@@ -15,6 +15,10 @@ class KuaiShouUploader(BaseUploader):
     @property
     def platform_name(self) -> str:
         return "kuaishou"
+
+    @property
+    def display_name(self) -> str:
+        return "快手"
 
     @property
     def login_url(self) -> str:

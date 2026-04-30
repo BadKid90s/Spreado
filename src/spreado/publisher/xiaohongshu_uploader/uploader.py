@@ -7,10 +7,10 @@ import time
 from playwright.async_api import Page, Error
 import asyncio
 
-from ...publisher.uploader import BaseUploader
+from ...publisher.base_publisher import BasePublisher
 
 
-class XiaoHongShuUploader(BaseUploader):
+class XiaoHongShuUploader(BasePublisher):
     """
     小红书视频上传器
     """
@@ -18,6 +18,10 @@ class XiaoHongShuUploader(BaseUploader):
     @property
     def platform_name(self) -> str:
         return "xiaohongshu"
+
+    @property
+    def display_name(self) -> str:
+        return "小红书"
 
     @property
     def login_url(self) -> str:

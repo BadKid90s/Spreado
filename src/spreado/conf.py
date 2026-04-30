@@ -18,3 +18,6 @@ CONSOLE_LOG_LEVEL = "INFO"  # 控制台输出的日志级别
 
 # 日志文件目录
 LOGS_DIR = BASE_DIR / "logs"
+
+# 插件目录
+PLUGINS_DIR = BASE_DIR / "plugins"

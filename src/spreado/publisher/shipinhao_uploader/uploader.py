@@ -4,7 +4,7 @@ from typing import List, Optional
 
 from playwright.async_api import Page, Error
 
-from ...publisher.uploader import BaseUploader
+from ...publisher.base_publisher import BasePublisher
 
 
 def _format_str_for_short_title(origin_title: str) -> str:
@@ -36,7 +36,7 @@ def _format_str_for_short_title(origin_title: str) -> str:
     return formatted_string
 
 
-class ShiPinHaoUploader(BaseUploader):
+class ShiPinHaoUploader(BasePublisher):
     """
     视频号上传器
     """
@@ -44,6 +44,10 @@ class ShiPinHaoUploader(BaseUploader):
     @property
     def platform_name(self) -> str:
         return "shipinhao"
+
+    @property
+    def display_name(self) -> str:
+        return "视频号"
 
     @property
     def login_url(self) -> str:
