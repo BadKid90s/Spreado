@@ -94,6 +94,16 @@ class KuaiShouUploader(BasePublisher):
 
     async def _upload_video_file(self, page: Page, file_path: str | Path) -> bool:
         try:
+            # 先等 upload 区域挂载（CI headless 下页面渲染较慢）
+            try:
+                await page.wait_for_selector(
+                    "button[class*='upload'], div[class*='upload'], input[type='file']",
+                    state="attached",
+                    timeout=15000,
+                )
+            except Error:
+                pass
+
             # 依次尝试多个上传按钮选择器，每个超时 3s
             btn_selectors = [
                 "button[class^='_upload-btn']",
@@ -131,7 +141,7 @@ class KuaiShouUploader(BasePublisher):
                     "div[class*='upload'] input[type='file']",
                 ]
                 if not await self._upload_file_to_first(
-                    page, file_input_selectors, file_path, timeout=10000
+                    page, file_input_selectors, file_path, timeout=15000
                 ):
                     self.logger.error("未找到上传入口（按钮及 file input 均未命中）")
                     return False
