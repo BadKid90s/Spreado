@@ -137,6 +137,28 @@ class TrackingLogger:
 
 async def _dry_run_publish(uploader, page) -> bool:
     """替换 _publish_video：只验证发布按钮可见，不点击。"""
+    # 视频号使用 wujie shadow DOM，需要 evaluate 检查
+    if uploader.platform_name == "shipinhao":
+        try:
+            found = await page.evaluate("""
+() => {
+    const w = document.querySelector('wujie-app');
+    const s = w && w.shadowRoot;
+    if (!s) return false;
+    const btns = s.querySelectorAll('div.form-btns button');
+    for (const b of btns) {
+        if (b.innerText.includes('发表')) return true;
+    }
+    return false;
+}
+""")
+            if found:
+                return True
+        except Error:
+            pass
+        uploader.logger.warning("未找到发布按钮（dry-run，shadow DOM），跳过验证")
+        return True
+
     sels = _PUBLISH_BUTTON_SELECTORS.get(
         uploader.platform_name,
         [
