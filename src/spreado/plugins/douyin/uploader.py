@@ -51,76 +51,52 @@ class DouYinUploader(BasePublisher):
         publish_date: Optional[datetime] = None,
         thumbnail_path: Optional[str | Path] = None,
     ) -> bool:
-        """
-        上传视频到抖音
-
-        Args:
-            page: 页面
-            file_path: 视频文件路径
-            title: 视频标题
-            content: 视频描述
-            tags: 视频标签列表
-            publish_date: 定时发布时间
-            thumbnail_path: 封面图片路径
-
-        Returns:
-            上传是否成功
-        """
         try:
+            with self.logger.step("upload_video", title=title, file=str(file_path)):
+                with self.logger.step("goto_upload_page"):
+                    await page.goto(self.publish_url)
+                    try:
+                        await page.wait_for_url(self.publish_url, timeout=5000)
+                    except Error:
+                        pass
 
-            await page.goto(self.publish_url)
-            self.logger.info("正在打开上传页面...")
-            await page.wait_for_url(self.publish_url)
+                with self.logger.step("upload_video_file", file=str(file_path)):
+                    if not await self._upload_video_file(page, file_path):
+                        return False
 
-            self.logger.info(f"正在上传视频: {title}")
+                with self.logger.step("wait_for_upload_complete"):
+                    if not await self._wait_for_upload_complete(page):
+                        return False
 
-            # 上传视频文件
-            if not await self._upload_video_file(page, file_path):
-                self.logger.error("视频文件上传失败，终止上传流程")
-                return False
+                with self.logger.step("fill_video_info", title=title):
+                    if not await self._fill_video_info(page, title, content, tags):
+                        return False
 
-            # 等待上传完成
-            if not await self._wait_for_upload_complete(page):
-                self.logger.error("视频上传未完成，终止上传流程")
-                return False
+                with self.logger.step("set_thumbnail", path=str(thumbnail_path or "")):
+                    if not await self._set_thumbnail(page, thumbnail_path):
+                        return False
 
-            # 填充视频信息
-            if not await self._fill_video_info(page, title, content, tags):
-                self.logger.error("视频信息填充失败，终止上传流程")
-                return False
+                with self.logger.step("set_third_party_platforms"):
+                    if not await self._set_third_party_platforms(page):
+                        return False
 
-            # 设置封面
-            if not await self._set_thumbnail(page, thumbnail_path):
-                self.logger.error("封面设置失败，终止上传流程")
-                return False
+                if publish_date:
+                    with self.logger.step(
+                        "set_schedule_time", at=publish_date.isoformat()
+                    ):
+                        if not await self._set_schedule_time(page, publish_date):
+                            return False
 
-            # 设置第三方平台同步
-            if not await self._set_third_party_platforms(page):
-                self.logger.error("第三方平台同步设置失败，终止上传流程")
-                return False
+                with self.logger.step("handle_auto_video_cover"):
+                    if not await self._handle_auto_video_cover(page):
+                        return False
 
-            if publish_date:
-                # 设置定时发布
-                if not await self._set_schedule_time(page, publish_date):
-                    self.logger.error("定时发布设置失败，终止上传流程")
-                    return False
-
-            # 处理自动封面设置
-            if not await self._handle_auto_video_cover(page):
-                self.logger.error("封面设置失败，终止上传流程")
-                return False
-
-            # 发布视频
-            if not await self._publish_video(page):
-                self.logger.error("视频发布失败，终止上传流程")
-                return False
-
-            self.logger.info("视频发布成功")
-
+                with self.logger.step("publish_video"):
+                    if not await self._publish_video(page):
+                        return False
             return True
-
         except Exception as e:
-            self.logger.error(f"上传视频时出错: {e}")
+            self.logger.error("upload_video 异常", reason=str(e)[:200])
             return False
 
     async def _upload_video_file(self, page: Page, file_path: str | Path) -> bool:
