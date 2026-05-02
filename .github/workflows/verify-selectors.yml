@@ -89,12 +89,19 @@ jobs:
           path: reports/selector-check-*.md
           retention-days: 30
 
-      - name: Commit report (scheduled run only)
-        if: github.event_name == 'schedule' && always()
+      - name: Commit report
+        if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # 只保留 latest + 最新归档，避免无限膨胀
+          # 清理旧归档，只保留最近 10 个（按时间戳排序）
+          cd reports
+          archived=$(ls -1 selector-check-????????T??????.md 2>/dev/null | sort -r | tail -n +11)
+          if [ -n "$archived" ]; then
+            echo "清理旧报告: $archived"
+            echo "$archived" | xargs rm -f
+          fi
+          cd ..
           git add reports/selector-check-latest.md reports/selector-check-*.md
           if git diff --cached --quiet; then
             echo "报告无变化，跳过 commit"
