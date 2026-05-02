@@ -17,7 +17,7 @@ import argparse
 import asyncio
 import sys
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional
 
@@ -277,7 +277,8 @@ async def main() -> int:
         print(f"[verify] {n} -> {r.status}", flush=True)
         results.append(r)
 
-    generated_at = datetime.now(timezone.utc)
+    _BEIJING_TZ = timezone(timedelta(hours=8))
+    generated_at = datetime.now(_BEIJING_TZ)
     report = render_report(results, generated_at)
     path = write_reports(report, generated_at)
     print(f"[verify] 报告已写入 {path}")

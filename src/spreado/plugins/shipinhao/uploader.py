@@ -61,10 +61,10 @@ class ShiPinHaoUploader(BasePublisher):
     @property
     def _login_selectors(self) -> List[str]:
         return [
-            "div.qrcode-wrap",
-            'text="登录"',
-            ':has-text("微信扫码登录")',
-            ".login-btn",
+            ".login-view",
+            ".login-content",
+            "iframe.display",
+            'link:has-text("视频号助手")',
         ]
 
     @property
