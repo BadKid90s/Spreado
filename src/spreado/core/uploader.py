@@ -17,6 +17,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Literal, Optional
+from urllib.parse import urlparse
 
 from playwright.async_api import Error, Locator, Page
 
@@ -108,6 +109,7 @@ class BaseUploader(ABC):
         """等待登录完成：positive DOM 出现，或 negative DOM 消失。"""
 
         async def check() -> bool:
+            # 1) positive 检测：authed 元素出现
             if self._authed_selectors:
                 for sel in self._authed_selectors:
                     try:
@@ -116,7 +118,7 @@ class BaseUploader(ABC):
                             return True
                     except Error:
                         continue
-                return False
+            # 2) negative 检测：登录表单消失 = 已登录（可能跳转到了非上传页）
             return not await self._check_login_required(page)
 
         return await self._wait_for_condition(
@@ -245,7 +247,18 @@ class BaseUploader(ABC):
                         if await self._check_login_required(page):
                             self.logger.warning("cookie 失效", method="login_dom")
                             return False
-                        # 3) 既无 positive 也无 negative：保守判为有效
+                        # 3) URL 仍在发布域名下 → cookie 大概率有效
+                        #    （headless 模式下 SPA 可能不渲染 DOM，但不会跳转到登录页）
+                        pub_domain = urlparse(self.publish_url).netloc
+                        cur_domain = urlparse(page.url).netloc
+                        if pub_domain and cur_domain == pub_domain:
+                            self.logger.info(
+                                "cookie 有效",
+                                method="same_domain",
+                                url=page.url,
+                            )
+                            return True
+                        # 4) 既无 positive 也无 negative：保守判为有效
                         if authed is None:
                             self.logger.info("cookie 有效", method="no_login_dom")
                             return True

@@ -39,6 +39,8 @@ class DouYinUploader(BasePublisher):
         return [
             "input[placeholder*='填写作品标题']",
             "div.semi-upload",
+            'text="选择封面"',
+            "div.upload-btn",
         ]
 
     async def _upload_video(
