@@ -1,6 +1,6 @@
 import asyncio
 
-from spreado.publisher.xiaohongshu_uploader import XiaoHongShuUploader
+from spreado.plugins.xiaohongshu import XiaoHongShuUploader
 
 
 async def main():

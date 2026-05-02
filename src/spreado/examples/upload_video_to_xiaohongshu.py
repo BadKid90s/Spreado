@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from spreado.conf import BASE_DIR
-from spreado.publisher.xiaohongshu_uploader import XiaoHongShuUploader
+from spreado.plugins.xiaohongshu import XiaoHongShuUploader
 from spreado.utils.files_times import get_title_and_hashtags
 
 

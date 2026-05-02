@@ -1,6 +1,6 @@
 import asyncio
 
-from spreado.publisher.shipinhao_uploader import ShiPinHaoUploader
+from spreado.plugins.shipinhao import ShiPinHaoUploader
 
 
 async def main():

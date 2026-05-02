@@ -1,0 +1,110 @@
+name: Verify Selectors
+
+on:
+  schedule:
+    - cron: '17 3 * * *'  # 每日 UTC 03:17 (北京时间 11:17)
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'src/spreado/plugins/**'
+      - 'src/spreado/core/**'
+      - 'scripts/verify_selectors.py'
+      - '.github/workflows/verify-selectors.yml'
+
+permissions:
+  contents: write  # 允许 workflow commit 报告回仓库
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # commit 报告需要 token；scheduled run 用默认 GITHUB_TOKEN
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Install Playwright Chromium
+        run: uv run playwright install --with-deps chromium
+
+      - name: Materialize platform cookies from secrets
+        env:
+          COOKIE_XIAOHONGSHU: ${{ secrets.COOKIE_XIAOHONGSHU }}
+          COOKIE_DOUYIN: ${{ secrets.COOKIE_DOUYIN }}
+          COOKIE_KUAISHOU: ${{ secrets.COOKIE_KUAISHOU }}
+          COOKIE_SHIPINHAO: ${{ secrets.COOKIE_SHIPINHAO }}
+        run: |
+          set -e
+          mkdir -p ci-cookies
+          write_cookie() {
+            local platform="$1"
+            local content="$2"
+            if [ -z "$content" ]; then
+              echo "::notice::secret COOKIE_${platform^^} 未配置，跳过 $platform 已登录态校验"
+              return
+            fi
+            local dir="ci-cookies/${platform}_uploader"
+            mkdir -p "$dir"
+            # 关闭 echo，避免 token 落入日志
+            set +x
+            printf '%s' "$content" > "$dir/account.json"
+            # 校验 JSON 合法
+            if ! python -c "import json,sys; json.load(open('$dir/account.json'))" 2>/dev/null; then
+              echo "::error::COOKIE_${platform^^} 不是合法 JSON"
+              exit 1
+            fi
+            echo "::notice::已落地 $platform cookie"
+          }
+          write_cookie xiaohongshu "$COOKIE_XIAOHONGSHU"
+          write_cookie douyin "$COOKIE_DOUYIN"
+          write_cookie kuaishou "$COOKIE_KUAISHOU"
+          write_cookie shipinhao "$COOKIE_SHIPINHAO"
+
+      - name: Run selector verification
+        id: verify
+        # 不加 strict：CI 没 cookie，PARTIAL 是预期；只对 BROKEN/UNREACHABLE 返回非 0
+        run: uv run python scripts/verify_selectors.py --cookies-dir ci-cookies
+        continue-on-error: true
+
+      - name: Clean up cookie files
+        if: always()
+        run: rm -rf ci-cookies
+
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: selector-check-report
+          path: reports/selector-check-*.md
+          retention-days: 30
+
+      - name: Commit report (scheduled run only)
+        if: github.event_name == 'schedule' && always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # 只保留 latest + 最新归档，避免无限膨胀
+          git add reports/selector-check-latest.md reports/selector-check-*.md
+          if git diff --cached --quiet; then
+            echo "报告无变化，跳过 commit"
+            exit 0
+          fi
+          git commit -m "chore(ci): 更新平台元素健康度报告 [skip ci]"
+          git push
+
+      - name: Fail job if verification failed
+        if: steps.verify.outcome == 'failure'
+        run: |
+          echo "::error::存在 BROKEN 或 UNREACHABLE 的平台，详见上传的报告。"
+          exit 1

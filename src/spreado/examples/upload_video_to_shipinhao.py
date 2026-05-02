@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from spreado.conf import BASE_DIR
-from spreado.publisher.shipinhao_uploader import ShiPinHaoUploader
+from spreado.plugins.shipinhao import ShiPinHaoUploader
 from spreado.utils.files_times import get_title_and_hashtags
 
 

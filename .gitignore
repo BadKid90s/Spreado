@@ -2,6 +2,7 @@
 .vscode
 .venv
 .ruff_cache
+.claude
 **/.DS_Store
 **/logs
 **/cookies
