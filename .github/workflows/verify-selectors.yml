@@ -77,6 +77,12 @@ jobs:
         run: uv run python scripts/verify_selectors.py --cookies-dir ci-cookies
         continue-on-error: true
 
+      - name: Run E2E test (dry-run)
+        id: e2e
+        # dry-run：走完上传流程但不实际发布；无 cookie 的平台自动跳过
+        run: uv run python scripts/e2e_test.py --cookies-dir ci-cookies
+        continue-on-error: true
+
       - name: Clean up cookie files
         if: always()
         run: rm -rf ci-cookies
@@ -85,8 +91,10 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: selector-check-report
-          path: reports/selector-check-*.md
+          name: platform-check-reports
+          path: |
+            reports/selector-check-*.md
+            reports/e2e-check-*.md
           retention-days: 30
 
       - name: Commit report
@@ -96,22 +104,25 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # 清理旧归档，只保留最近 10 个（按时间戳排序）
           cd reports
-          archived=$(ls -1 selector-check-????????T??????.md 2>/dev/null | sort -r | tail -n +11)
-          if [ -n "$archived" ]; then
-            echo "清理旧报告: $archived"
-            echo "$archived" | xargs rm -f
-          fi
+          for prefix in selector-check e2e-check; do
+            archived=$(ls -1 ${prefix}-????????T??????.md 2>/dev/null | sort -r | tail -n +11)
+            if [ -n "$archived" ]; then
+              echo "清理旧报告: $archived"
+              echo "$archived" | xargs rm -f
+            fi
+          done
           cd ..
-          git add reports/selector-check-latest.md reports/selector-check-*.md
+          git add reports/selector-check-latest.md reports/selector-check-*.md \
+                  reports/e2e-check-latest.md reports/e2e-check-*.md
           if git diff --cached --quiet; then
             echo "报告无变化，跳过 commit"
             exit 0
           fi
-          git commit -m "chore(ci): 更新平台元素健康度报告 [skip ci]"
+          git commit -m "chore(ci): 更新平台健康度报告 [skip ci]"
           git push
 
       - name: Fail job if verification failed
-        if: steps.verify.outcome == 'failure'
+        if: steps.verify.outcome == 'failure' || steps.e2e.outcome == 'failure'
         run: |
-          echo "::error::存在 BROKEN 或 UNREACHABLE 的平台，详见上传的报告。"
+          echo "::error::存在失败的平台检测，详见上传的报告。"
           exit 1
