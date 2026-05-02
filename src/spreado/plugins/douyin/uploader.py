@@ -37,10 +37,10 @@ class DouYinUploader(BasePublisher):
     @property
     def _authed_selectors(self) -> List[str]:
         return [
-            "input[placeholder*='填写作品标题']",
+            "div[class^='container']",
+            "div[class*='upload']",
+            "input[placeholder*='作品标题']",
             "div.semi-upload",
-            'text="选择封面"',
-            "div.upload-btn",
         ]
 
     async def _upload_video(

@@ -262,7 +262,10 @@ async def main() -> int:
     args = parser.parse_args()
 
     loader = get_plugin_loader()
-    names = args.platforms or loader.list_publisher_names()
+    SKIP_PLATFORMS = {"bilibili"}
+    names = args.platforms or [
+        n for n in loader.list_publisher_names() if n not in SKIP_PLATFORMS
+    ]
 
     results: List[PlatformResult] = []
     for n in names:
