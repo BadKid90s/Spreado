@@ -36,15 +36,7 @@ class BilibiliUploader(BasePublisher):
         return "https://passport.bilibili.com/login"
 
     @property
-    def login_success_url(self) -> str:
-        return "https://member.bilibili.com/platform/upload/video/frame"
-
-    @property
-    def upload_url(self) -> str:
-        return "https://member.bilibili.com/platform/upload/video/frame"
-
-    @property
-    def success_url_pattern(self) -> str:
+    def publish_url(self) -> str:
         return "https://member.bilibili.com/platform/upload/video/frame"
 
     @property
@@ -55,6 +47,11 @@ class BilibiliUploader(BasePublisher):
             'text="短信登录"',
             ".login-btn",
         ]
+
+    @property
+    def _authed_selectors(self) -> List[str]:
+        # bilibili 是 stub，留空让 negative DOM fallback 生效
+        return []
 
     async def _upload_video(
         self,
@@ -71,7 +68,7 @@ class BilibiliUploader(BasePublisher):
 
         注意: 这是一个示例框架，实际的 B站 上传逻辑需要根据页面结构实现。
         """
-        self.logger.info("[+] B站上传器是示例插件，请根据实际页面结构实现上传逻辑")
+        self.logger.info("B站上传器是示例插件，请根据实际页面结构实现上传逻辑")
 
         # TODO: 实现 B站 上传逻辑
         # 1. 上传视频文件

@@ -189,5 +189,7 @@ class AccountManager:
                     if not new_cookie.exists():
                         old_cookie.rename(new_cookie)
                         migrated += 1
-                        logger.info(f"迁移 Cookie: {old_dir.name} -> {platform}/default")
+                        logger.info(
+                            f"迁移 Cookie: {old_dir.name} -> {platform}/default"
+                        )
         return migrated

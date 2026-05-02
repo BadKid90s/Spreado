@@ -25,9 +25,7 @@ LOGO = r"""
            全平台内容发布工具 v{}
            作者: {}
            邮箱: {}
-""".format(
-    __logo__, __version__, __author__, __email__
-)
+""".format(__logo__, __version__, __author__, __email__)
 
 
 def _get_platform_names() -> dict:
@@ -134,7 +132,9 @@ async def cmd_verify(args):
     logger = get_logger("VERIFY")
 
     loader = get_plugin_loader()
-    platforms = loader.list_publisher_names() if args.platform == "all" else [args.platform]
+    platforms = (
+        loader.list_publisher_names() if args.platform == "all" else [args.platform]
+    )
 
     print(f"\n{'=' * 50}")
     print("验证 Cookie 状态")
@@ -240,7 +240,9 @@ async def cmd_upload(args):
             return 1
 
     loader = get_plugin_loader()
-    platforms = loader.list_publisher_names() if args.platform == "all" else [args.platform]
+    platforms = (
+        loader.list_publisher_names() if args.platform == "all" else [args.platform]
+    )
     platform_names = _get_platform_names()
 
     print(f"\n{'=' * 50}")

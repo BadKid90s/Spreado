@@ -25,14 +25,18 @@ class Task:
     tags: List[str] = field(default_factory=list)  # 标签列表
 
     # --- 素材文件 ---
-    media_files: List[str] = field(default_factory=list)  # 素材文件路径列表 (视频单个, 图文多个)
+    media_files: List[str] = field(
+        default_factory=list
+    )  # 素材文件路径列表 (视频单个, 图文多个)
     thumbnail_path: Optional[str] = None  # 封面图路径
 
     # --- 发布设置 ---
     publish_date: Optional[datetime] = None  # 定时发布时间, None 表示立即发布
 
     # --- 扩展字段 ---
-    extra: Dict[str, Any] = field(default_factory=dict)  # 平台特有参数 (如 location, product_link)
+    extra: Dict[str, Any] = field(
+        default_factory=dict
+    )  # 平台特有参数 (如 location, product_link)
 
     def to_dict(self) -> Dict[str, Any]:
         """序列化为字典"""
@@ -53,11 +57,13 @@ class Task:
     def to_json(self) -> str:
         """序列化为 JSON 字符串"""
         import json
+
         return json.dumps(self.to_dict(), ensure_ascii=False, indent=2)
 
     @classmethod
     def from_json(cls, json_str: str) -> "Task":
         """从 JSON 字符串反序列化"""
         import json
+
         data = json.loads(json_str)
         return cls.from_dict(data)

@@ -84,9 +84,7 @@ class BasePublisher(BaseUploader):
         Returns:
             是否发布成功
         """
-        raise NotImplementedError(
-            f"平台 {self.display_name} 暂不支持图文发布"
-        )
+        raise NotImplementedError(f"平台 {self.display_name} 暂不支持图文发布")
 
     async def execute(self, task: Task) -> bool:
         """

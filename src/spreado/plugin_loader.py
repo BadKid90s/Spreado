@@ -64,7 +64,9 @@ class PluginLoader:
                     self._load_module(module_name)
 
         self._loaded = True
-        logger.info(f"已加载 {len(self._publishers)} 个平台插件: {list(self._publishers.keys())}")
+        logger.info(
+            f"已加载 {len(self._publishers)} 个平台插件: {list(self._publishers.keys())}"
+        )
 
     def _load_module(self, module_path: str) -> None:
         """通过模块路径加载"""
