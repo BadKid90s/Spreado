@@ -2,7 +2,7 @@
 .vscode
 .venv
 .ruff_cache
-.claude
+.playwright-cli
 **/.DS_Store
 **/logs
 **/cookies

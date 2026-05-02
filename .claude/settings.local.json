@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(playwright-cli)",
+      "Bash(uv sync *)",
+      "Bash(uv run *)",
+      "Bash(ffmpeg -version)",
+      "Bash(git stash *)",
+      "Bash(playwright-cli open *)",
+      "Bash(playwright-cli --raw snapshot)",
+      "Bash(playwright-cli close *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(gh workflow *)",
+      "Bash(brew list *)",
+      "Bash(git checkout *)",
+      "Bash(git merge *)",
+      "Bash(gh run *)",
+      "Bash(npx playwright-cli *)"
+    ]
+  }
+}
