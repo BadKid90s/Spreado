@@ -11,7 +11,6 @@ from __future__ import annotations
 import logging
 import sys
 from contextlib import contextmanager
-import time
 from typing import Any, Iterator
 
 from ..conf import LOG_LEVEL, LOGS_DIR

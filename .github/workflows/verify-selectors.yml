@@ -119,7 +119,13 @@ jobs:
             exit 0
           fi
           git commit -m "chore(ci): 更新平台健康度报告 [skip ci]"
-          git push
+          # PR checkout 处于 detached HEAD，需要显式指定目标分支
+          PUSH_REF="${GITHUB_HEAD_REF:-$(git rev-parse --abbrev-ref HEAD)}"
+          if [ "$PUSH_REF" = "HEAD" ]; then
+            echo "无法确定目标分支，跳过 push（报告已作为 artifact 上传）"
+            exit 0
+          fi
+          git push origin HEAD:"$PUSH_REF"
 
       - name: Fail job if verification failed
         if: steps.verify.outcome == 'failure' || steps.e2e.outcome == 'failure'

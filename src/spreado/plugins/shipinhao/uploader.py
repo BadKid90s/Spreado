@@ -27,10 +27,13 @@ _SHADOW_EVAL = """
 
 
 def _format_str_for_short_title(origin_title: str) -> str:
-    allowed_special_chars = "《》"":+?%°"
+    allowed_special_chars = "《》" ":+?%°"
     filtered_chars = [
-        char if char.isalnum() or char in allowed_special_chars
-        else " " if char == "," else ""
+        (
+            char
+            if char.isalnum() or char in allowed_special_chars
+            else " " if char == "," else ""
+        )
         for char in origin_title
     ]
     s = "".join(filtered_chars)
@@ -79,7 +82,9 @@ class ShiPinHaoUploader(BasePublisher):
         """在 wujie shadow root 上下文执行 JS 并返回结果。"""
         return await page.evaluate(_SHADOW_EVAL % js)
 
-    async def _shadow_wait(self, page: Page, selector: str, timeout: float = 20.0) -> bool:
+    async def _shadow_wait(
+        self, page: Page, selector: str, timeout: float = 20.0
+    ) -> bool:
         """轮询等待 shadow DOM 内出现 selector 对应的元素。"""
         deadline = time.monotonic() + timeout
         expr = f"!!s.querySelector('{selector}')"
@@ -110,17 +115,22 @@ class ShiPinHaoUploader(BasePublisher):
         cdp = await page.context.new_cdp_session(page)
         try:
             # 获取全局对象引用作为 callFunctionOn 的 receiver
-            global_result = await cdp.send("Runtime.evaluate", {
-                "expression": "globalThis",
-                "returnByValue": False,
-            })
+            global_result = await cdp.send(
+                "Runtime.evaluate",
+                {
+                    "expression": "globalThis",
+                    "returnByValue": False,
+                },
+            )
             object_id = global_result["result"].get("objectId")
             if not object_id:
                 return False
 
-            result = await cdp.send("Runtime.callFunctionOn", {
-                "objectId": object_id,
-                "functionDeclaration": f"""function(b64Data, fname) {{
+            result = await cdp.send(
+                "Runtime.callFunctionOn",
+                {
+                    "objectId": object_id,
+                    "functionDeclaration": f"""function(b64Data, fname) {{
                     const w = document.querySelector('wujie-app');
                     const s = w && w.shadowRoot;
                     if (!s) return {{ ok: false, reason: 'no_shadow' }};
@@ -136,12 +146,13 @@ class ShiPinHaoUploader(BasePublisher):
                     input.dispatchEvent(new Event('change', {{ bubbles: true }}));
                     return {{ ok: true, count: input.files.length }};
                 }}""",
-                "arguments": [
-                    {"type": "string", "value": b64},
-                    {"type": "string", "value": filename},
-                ],
-                "returnByValue": True,
-            })
+                    "arguments": [
+                        {"type": "string", "value": b64},
+                        {"type": "string", "value": filename},
+                    ],
+                    "returnByValue": True,
+                },
+            )
             value = result.get("result", {}).get("value", {})
             return value.get("ok") is True
         finally:
@@ -168,7 +179,9 @@ class ShiPinHaoUploader(BasePublisher):
                     except Exception:
                         pass
                     # 等待 wujie shadow DOM 内容渲染
-                    if not await self._shadow_wait(page, 'input[type="file"]', timeout=20):
+                    if not await self._shadow_wait(
+                        page, 'input[type="file"]', timeout=20
+                    ):
                         raise RuntimeError("wujie shadow DOM 未渲染 upload 区域")
 
                 with self.logger.step("upload_video_file", file=str(file_path)):
@@ -188,7 +201,9 @@ class ShiPinHaoUploader(BasePublisher):
                         return False
 
                 if publish_date:
-                    with self.logger.step("set_schedule_time", at=publish_date.isoformat()):
+                    with self.logger.step(
+                        "set_schedule_time", at=publish_date.isoformat()
+                    ):
                         if not await self._set_schedule_time(page, publish_date):
                             return False
 
@@ -236,16 +251,21 @@ class ShiPinHaoUploader(BasePublisher):
             except Exception:
                 return False
 
-        return await self._wait_for_condition(check, timeout=120.0, interval=2.0, desc="upload_complete")
+        return await self._wait_for_condition(
+            check, timeout=120.0, interval=2.0, desc="upload_complete"
+        )
 
     async def _fill_video_info(
         self, page: Page, title: str = "", content: str = "", tags: List[str] = None
     ) -> bool:
         try:
             # 点击编辑器获取焦点
-            await self._shadow_eval(page, """
+            await self._shadow_eval(
+                page,
+                """
 (() => { s.querySelector('.input-editor').click(); })()
-""")
+""",
+            )
             await page.wait_for_timeout(500)
 
             # 输入标题
@@ -284,7 +304,9 @@ class ShiPinHaoUploader(BasePublisher):
 
         try:
             # 1) 点击个人主页卡片
-            clicked = await self._shadow_eval(page, """
+            clicked = await self._shadow_eval(
+                page,
+                """
 (() => {
     const el = s.querySelector('div.tips-wrap div.cover-tips');
     if (el && el.innerText.includes('个人主页卡片')) {
@@ -293,14 +315,15 @@ class ShiPinHaoUploader(BasePublisher):
     }
     return false;
 })()
-""")
+""",
+            )
             if not clicked:
                 self.logger.warning("未找到个人主页卡片入口，跳过封面")
                 return True
             self.logger.info("已点击个人主页卡片")
 
             # 2) 等待上传封面元素
-            await self._shadow_wait(page, 'div.single-cover-uploader-wrap', timeout=10)
+            await self._shadow_wait(page, "div.single-cover-uploader-wrap", timeout=10)
 
             # 3) 通过 CDP 注入封面图片
             ok = await self._cdp_set_file(
@@ -314,13 +337,18 @@ class ShiPinHaoUploader(BasePublisher):
             self.logger.info("封面图片已选择")
 
             # 4) 等待裁剪对话框出现
-            await self._shadow_wait(page, 'div.weui-desktop-dialog__wrp:visible', timeout=10)
-            await self._shadow_eval(page, """
+            await self._shadow_wait(
+                page, "div.weui-desktop-dialog__wrp:visible", timeout=10
+            )
+            await self._shadow_eval(
+                page,
+                """
 (() => {
     const btns = s.querySelectorAll('div.cover-set-footer button');
     for (const b of btns) { if (b.innerText.includes('确认')) { b.click(); break; } }
 })()
-""")
+""",
+            )
             self.logger.info("封面设置完成")
             await page.wait_for_timeout(2000)
             return True
@@ -332,17 +360,22 @@ class ShiPinHaoUploader(BasePublisher):
     async def _set_schedule_time(self, page: Page, publish_date: datetime) -> bool:
         try:
             # 点击定时选项
-            await self._shadow_eval(page, f"""
-(() => {{
+            await self._shadow_eval(
+                page,
+                """
+(() => {
     const labels = s.querySelectorAll('label');
-    for (const l of labels) {{ if (l.innerText.includes('定时')) {{ l.click(); break; }} }}
-}})()
-""")
+    for (const l of labels) { if (l.innerText.includes('定时')) { l.click(); break; } }
+})()
+""",
+            )
             await page.wait_for_timeout(500)
 
             # 日期选择
             day_str = str(publish_date.day)
-            await self._shadow_eval(page, f"""
+            await self._shadow_eval(
+                page,
+                f"""
 (() => {{
     const cells = s.querySelectorAll('table a');
     for (const c of cells) {{
@@ -351,17 +384,21 @@ class ShiPinHaoUploader(BasePublisher):
         }}
     }}
 }})()
-""")
+""",
+            )
             await page.wait_for_timeout(500)
 
             # 时间输入
             time_str = publish_date.strftime("%H:%M")
-            await self._shadow_eval(page, f"""
-(() => {{
+            await self._shadow_eval(
+                page,
+                """
+(() => {
     const inp = s.querySelector('input[placeholder*="时间"]');
-    if (inp) {{ inp.click(); }}
-}})()
-""")
+    if (inp) { inp.click(); }
+})()
+""",
+            )
             await page.keyboard.press("Control+KeyA")
             await page.keyboard.type(time_str)
             await page.keyboard.press("Enter")
@@ -376,7 +413,9 @@ class ShiPinHaoUploader(BasePublisher):
     async def _add_short_title(self, page: Page, title: str) -> bool:
         try:
             short_title = _format_str_for_short_title(title)
-            await self._shadow_eval(page, f"""
+            await self._shadow_eval(
+                page,
+                f"""
 (() => {{
     const els = s.querySelectorAll('span input[type="text"]');
     for (const inp of els) {{
@@ -388,7 +427,8 @@ class ShiPinHaoUploader(BasePublisher):
         }}
     }}
 }})()
-""")
+""",
+            )
             self.logger.info("短标题已添加", title=short_title)
             return True
         except Exception as e:
@@ -397,7 +437,9 @@ class ShiPinHaoUploader(BasePublisher):
 
     async def _publish_video(self, page: Page) -> bool:
         try:
-            clicked = await self._shadow_eval(page, """
+            clicked = await self._shadow_eval(
+                page,
+                """
 (() => {
     const btns = s.querySelectorAll('div.form-btns button');
     for (const b of btns) { if (b.innerText.includes('发表') && !b.className.includes('disabled')) {
@@ -405,7 +447,8 @@ class ShiPinHaoUploader(BasePublisher):
     }}
     return false;
 })()
-""")
+""",
+            )
             if not clicked:
                 self.logger.error("未找到可点击的发表按钮")
                 return False
