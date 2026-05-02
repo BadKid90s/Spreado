@@ -47,6 +47,15 @@ class BaseUploader(ABC):
         else:
             self.cookie_file_path = Path(cookie_file_path)
 
+    @property
+    def _browser_channel(self) -> Optional[str]:
+        """登录时使用的浏览器通道。None = 使用系统 Chrome（默认）。
+
+        子类可覆盖以使用 Playwright 内置 Chromium，
+        例如快手因 system Chrome 会话冲突需要使用 Chromium。
+        """
+        return None
+
     # ---------------------------------------------------------------- 抽象 API
 
     @property
@@ -91,25 +100,49 @@ class BaseUploader(ABC):
     async def login_flow(self) -> bool:
         try:
             with self.logger.step("login_flow", platform=self.platform_name):
-                async with await StealthBrowser.create(headless=False) as browser:
+                async with await StealthBrowser.create(
+                    headless=False, channel=self._browser_channel
+                ) as browser:
                     page = await browser.new_page()
                     await page.goto(self.login_url)
                     self.logger.info("等待用户在浏览器内完成登录…")
                     if not await self._wait_for_login(page, timeout=120.0):
                         raise RuntimeError("登录超时")
+                    # 导航到发布页，让页面设置所需的 cookie（如 cp 平台 cookie）
+                    await page.goto(self.publish_url, timeout=30000)
+                    await page.wait_for_timeout(5000)
+                    if await self._check_login_required(page):
+                        raise RuntimeError(
+                            f"登录检测通过但 cookie 无效：发布页 {self.publish_url} 仍要求登录"
+                        )
+                    # 发布页 cookie 已设置，现在保存完整的 storage_state
                     self.cookie_file_path.parent.mkdir(parents=True, exist_ok=True)
                     await page.context.storage_state(path=self.cookie_file_path)
                     self.logger.info("cookie 已保存", path=str(self.cookie_file_path))
+                    self.logger.info("cookie 验证通过", publish_url=self.publish_url)
                     return True
         except Exception as e:
             self.logger.error("登录失败", reason=str(e)[:200])
             return False
 
     async def _wait_for_login(self, page: Page, *, timeout: float = 120.0) -> bool:
-        """等待登录完成：positive DOM 出现，或 negative DOM 消失。"""
+        """等待登录完成。
+
+        策略：用户在浏览器中登录后，页面会跳转离开登录页。
+        检测 positive DOM（authed 元素）或 negative DOM（登录表单消失）。
+
+        注意：若页面仍在 login_url 的同一 path（如扫码确认中），不强制跳转。
+        """
+        await page.wait_for_timeout(3000)
+
+        login_parsed = urlparse(self.login_url)
 
         async def check() -> bool:
-            # 1) positive 检测：authed 元素出现
+            cur_url = page.url
+            # Chrome 错误页 → 页面加载失败，继续等待
+            if cur_url.startswith(("chrome-error://", "edge://")):
+                return False
+            # positive 检测：authed 元素出现
             if self._authed_selectors:
                 for sel in self._authed_selectors:
                     try:
@@ -118,11 +151,29 @@ class BaseUploader(ABC):
                             return True
                     except Error:
                         continue
-            # 2) negative 检测：登录表单消失 = 已登录（可能跳转到了非上传页）
-            return not await self._check_login_required(page)
+            # negative 检测：登录表单消失 = 可能已登录
+            if await self._check_login_required(page):
+                return False
+            # 登录表单未找到。若仍在 login_url 的同一 netloc+path（如扫码等待确认），
+            # 不做跳转，继续轮询。
+            cur_parsed = urlparse(cur_url)
+            if (
+                cur_parsed.netloc == login_parsed.netloc
+                and cur_parsed.path == login_parsed.path
+            ):
+                return False
+            # 已离开登录页 → 导航到发布页二次确认
+            try:
+                await page.goto(self.publish_url, timeout=15000)
+                await page.wait_for_timeout(3000)
+                if not await self._check_login_required(page):
+                    return True
+            except Exception:
+                pass
+            return False
 
         return await self._wait_for_condition(
-            check, timeout=timeout, interval=1.0, desc="login"
+            check, timeout=timeout, interval=2.0, desc="login"
         )
 
     async def verify_cookie_flow(self, auto_login: bool = False) -> bool:
@@ -150,25 +201,84 @@ class BaseUploader(ABC):
     ) -> bool:
         try:
             with self.logger.step("upload_video_flow", title=title) as step:
-                if not await self.verify_cookie_flow(auto_login=auto_login):
+                cookie_ok = await self.verify_cookie_flow(auto_login=auto_login)
+                if cookie_ok:
+                    # cookie 有效，使用 headless 浏览器上传
+                    async with await StealthBrowser.create(headless=True) as browser:
+                        await browser.load_cookies_from_file(self.cookie_file_path)
+                        async with await browser.new_page() as page:
+                            await page.goto(self.publish_url)
+                            ok = await self._upload_video(
+                                page=page,
+                                file_path=file_path,
+                                title=title,
+                                content=content,
+                                tags=tags,
+                                publish_date=publish_date,
+                                thumbnail_path=thumbnail_path,
+                            )
+                            step.add_field(result="success" if ok else "failure")
+                            return ok
+                elif auto_login:
+                    # cookie 无效 + auto_login：在同一个浏览器中登录并上传
+                    # （解决跨浏览器 fingerprint 不兼容问题，如快手）
+                    self.logger.info("cookie 无效，启动登录流程（同一浏览器）")
+                    return await self._login_and_upload(
+                        file_path=file_path,
+                        title=title,
+                        content=content,
+                        tags=tags,
+                        publish_date=publish_date,
+                        thumbnail_path=thumbnail_path,
+                    )
+                else:
                     raise RuntimeError("cookie 无效")
-                async with await StealthBrowser.create(headless=True) as browser:
-                    await browser.load_cookies_from_file(self.cookie_file_path)
-                    async with await browser.new_page() as page:
-                        await page.goto(self.publish_url)
-                        ok = await self._upload_video(
-                            page=page,
-                            file_path=file_path,
-                            title=title,
-                            content=content,
-                            tags=tags,
-                            publish_date=publish_date,
-                            thumbnail_path=thumbnail_path,
-                        )
-                        step.add_field(result="success" if ok else "failure")
-                        return ok
         except Exception as e:
             self.logger.error("上传流程异常", reason=str(e)[:200])
+            return False
+
+    async def _login_and_upload(
+        self,
+        file_path: str | Path,
+        title: str = "",
+        content: str = "",
+        tags: List[str] = None,
+        publish_date: Optional[datetime] = None,
+        thumbnail_path: Optional[str | Path] = None,
+    ) -> bool:
+        """在同一个浏览器中完成登录 + 上传（解决 fingerprint 不兼容问题）。"""
+        try:
+            with self.logger.step("login_and_upload"):
+                async with await StealthBrowser.create(
+                    headless=False, channel=self._browser_channel
+                ) as browser:
+                    # 1) 登录
+                    page = await browser.new_page()
+                    await page.goto(self.login_url)
+                    self.logger.info("等待用户在浏览器内完成登录…")
+                    if not await self._wait_for_login(page, timeout=120.0):
+                        raise RuntimeError("登录超时")
+                    # 保存 cookie 供后续使用
+                    self.cookie_file_path.parent.mkdir(parents=True, exist_ok=True)
+                    await page.context.storage_state(path=self.cookie_file_path)
+                    self.logger.info("cookie 已保存", path=str(self.cookie_file_path))
+                    # 2) 导航到发布页并上传
+                    await page.goto(self.publish_url)
+                    await page.wait_for_timeout(3000)
+                    if await self._check_login_required(page):
+                        raise RuntimeError("登录后发布页仍要求登录")
+                    ok = await self._upload_video(
+                        page=page,
+                        file_path=file_path,
+                        title=title,
+                        content=content,
+                        tags=tags,
+                        publish_date=publish_date,
+                        thumbnail_path=thumbnail_path,
+                    )
+                    return ok
+        except Exception as e:
+            self.logger.error("登录并上传失败", reason=str(e)[:200])
             return False
 
     # -------------------------------------------------------- 登录检测：内部实现
@@ -238,19 +348,18 @@ class BaseUploader(ABC):
                     await browser.load_cookies_from_file(self.cookie_file_path)
                     async with await browser.new_page() as page:
                         await page.goto(self.publish_url, timeout=30000)
+                        pub_domain = urlparse(self.publish_url).netloc
+                        cur_domain = urlparse(page.url).netloc
                         # 1) positive 检测优先
                         authed = await self._check_authed(page)
                         if authed is True:
                             self.logger.info("cookie 有效", method="authed_dom")
                             return True
-                        # 2) negative 兜底
+                        # 2) negative 检测：登录表单可见 → cookie 失效
                         if await self._check_login_required(page):
                             self.logger.warning("cookie 失效", method="login_dom")
                             return False
-                        # 3) URL 仍在发布域名下 → cookie 大概率有效
-                        #    （headless 模式下 SPA 可能不渲染 DOM，但不会跳转到登录页）
-                        pub_domain = urlparse(self.publish_url).netloc
-                        cur_domain = urlparse(page.url).netloc
+                        # 3) URL 仍在发布域名下 + 无登录表单 → cookie 有效
                         if pub_domain and cur_domain == pub_domain:
                             self.logger.info(
                                 "cookie 有效",

@@ -209,19 +209,30 @@ async def _test_platform(
     inst._publish_video = lambda page: _dry_run_publish(inst, page)  # type: ignore
     inst.logger = TrackingLogger(inst.logger)  # type: ignore
 
+    flow_ok = False
     try:
-        await inst.upload_video_flow(
+        flow_ok = await inst.upload_video_flow(
             file_path=video,
             title=title,
             content=content,
             tags=tags,
             thumbnail_path=cover,
-            auto_login=False,
+            auto_login=True,
         )
     except Exception as e:
         inst.logger.steps.append(  # type: ignore
             StepResult("exception", passed=False, note=str(e)[:200])
         )
+
+    # upload_video_flow 返回 False（无异常）时补充失败步骤，避免 false positive
+    if not flow_ok:
+        tracked = {s.name for s in inst.logger.steps}  # type: ignore
+        expected = ["upload_video_file", "wait_for_upload_complete", "fill_video_info"]
+        for name in expected:
+            if name not in tracked:
+                inst.logger.steps.append(  # type: ignore
+                    StepResult(name, passed=False, note="未执行（上游步骤失败）")
+                )
 
     result.steps = inst.logger.steps  # type: ignore
 

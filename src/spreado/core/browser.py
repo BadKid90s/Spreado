@@ -161,8 +161,6 @@ class StealthBrowser:
             **browser_config,
         )
 
-        # 3. 在创建 Context 时注入 storage_state
-        # 这是最稳健的方式，同时恢复 Cookies 和 LocalStorage
         self.context = await self.browser.new_context(
             no_viewport=True, ignore_https_errors=True
         )
