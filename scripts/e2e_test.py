@@ -105,6 +105,9 @@ class TrackingStepContext:
         )
         return False  # don't suppress
 
+    def add_field(self, **fields):
+        pass  # no-op in dry-run
+
 
 class TrackingLogger:
     """拦截 logger.step() 调用，记录每步结果。"""
@@ -115,6 +118,9 @@ class TrackingLogger:
 
     def step(self, name: str, **fields):
         return TrackingStepContext(self, name)
+
+    def debug(self, msg: str, **fields):
+        pass
 
     def info(self, msg: str, **fields):
         self._real.info(msg, **fields)
