@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import logging
 import sys
-import time
 from contextlib import contextmanager
 from typing import Any, Iterator
 
@@ -129,23 +128,19 @@ class StepLogger(logging.LoggerAdapter):
 
         失败时（块内抛异常）记 ERROR 后再 raise；成功时记 INFO。
         """
-        start = time.monotonic()
         self.info(f"{_ICON_START} {name}", **fields)
         handle = _StepHandle(self, name)
         try:
             yield handle
         except Exception as e:
-            dur = time.monotonic() - start
             self.error(
                 f"{_ICON_FAIL} {name}",
-                duration=f"{dur:.2f}s",
                 error=type(e).__name__,
                 reason=str(e)[:200],
             )
             raise
         else:
-            dur = time.monotonic() - start
-            self.info(f"{_ICON_OK} {name}", duration=f"{dur:.2f}s", **handle._fields)
+            self.info(f"{_ICON_OK} {name}", **handle._fields)
 
 
 class _StepHandle:

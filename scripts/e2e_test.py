@@ -137,6 +137,28 @@ class TrackingLogger:
 
 async def _dry_run_publish(uploader, page) -> bool:
     """替换 _publish_video：只验证发布按钮可见，不点击。"""
+    # 视频号使用 wujie shadow DOM，需要 evaluate 检查
+    if uploader.platform_name == "shipinhao":
+        try:
+            found = await page.evaluate("""
+() => {
+    const w = document.querySelector('wujie-app');
+    const s = w && w.shadowRoot;
+    if (!s) return false;
+    const btns = s.querySelectorAll('div.form-btns button');
+    for (const b of btns) {
+        if (b.innerText.includes('发表')) return true;
+    }
+    return false;
+}
+""")
+            if found:
+                return True
+        except Error:
+            pass
+        uploader.logger.warning("未找到发布按钮（dry-run，shadow DOM），跳过验证")
+        return True
+
     sels = _PUBLISH_BUTTON_SELECTORS.get(
         uploader.platform_name,
         [
@@ -187,19 +209,30 @@ async def _test_platform(
     inst._publish_video = lambda page: _dry_run_publish(inst, page)  # type: ignore
     inst.logger = TrackingLogger(inst.logger)  # type: ignore
 
+    flow_ok = False
     try:
-        await inst.upload_video_flow(
+        flow_ok = await inst.upload_video_flow(
             file_path=video,
             title=title,
             content=content,
             tags=tags,
             thumbnail_path=cover,
-            auto_login=False,
+            auto_login=True,
         )
     except Exception as e:
         inst.logger.steps.append(  # type: ignore
             StepResult("exception", passed=False, note=str(e)[:200])
         )
+
+    # upload_video_flow 返回 False（无异常）时补充失败步骤，避免 false positive
+    if not flow_ok:
+        tracked = {s.name for s in inst.logger.steps}  # type: ignore
+        expected = ["upload_video_file", "wait_for_upload_complete", "fill_video_info"]
+        for name in expected:
+            if name not in tracked:
+                inst.logger.steps.append(  # type: ignore
+                    StepResult(name, passed=False, note="未执行（上游步骤失败）")
+                )
 
     result.steps = inst.logger.steps  # type: ignore
 

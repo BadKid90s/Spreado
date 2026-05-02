@@ -31,7 +31,12 @@ class KuaiShouUploader(BasePublisher):
 
     @property
     def _login_selectors(self) -> List[str]:
-        return ['text="立即登录"', 'text="扫码登录"', 'text="登录"', ".login-btn"]
+        return [
+            'text="立即登录"',
+            ".platform-switch-tips",
+            "button.pl-btn.pl-btn-primary",
+            ".login-btn",
+        ]
 
     @property
     def _authed_selectors(self) -> List[str]:
@@ -88,30 +93,63 @@ class KuaiShouUploader(BasePublisher):
             return False
 
     async def _upload_video_file(self, page: Page, file_path: str | Path) -> bool:
-        """
-        上传视频文件
-
-        Args:
-            page: 页面实例
-            file_path: 视频文件路径
-
-        Returns:
-            是否成功上传视频文件
-        """
         try:
-            upload_button = page.locator("button[class^='_upload-btn']")
-            await upload_button.wait_for(state="visible")
+            # 先等 upload 区域挂载（CI headless 下页面渲染较慢）
+            try:
+                await page.wait_for_selector(
+                    "button[class*='upload'], div[class*='upload'], input[type='file']",
+                    state="attached",
+                    timeout=15000,
+                )
+            except Error:
+                pass
 
-            async with page.expect_file_chooser() as fc_info:
-                await upload_button.click()
-            file_chooser = await fc_info.value
-            await file_chooser.set_files(file_path)
+            # 依次尝试多个上传按钮选择器，每个超时 3s
+            btn_selectors = [
+                "button[class^='_upload-btn']",
+                "button[class*='upload-btn']",
+                "button[class*='upload']",
+                "div[class*='upload'] button",
+                ".ant-upload button",
+            ]
+            upload_button = None
+            for sel in btn_selectors:
+                try:
+                    btn = page.locator(sel).first
+                    if await btn.count() > 0:
+                        await btn.wait_for(state="visible", timeout=3000)
+                        upload_button = btn
+                        break
+                except Error:
+                    continue
+
+            if upload_button:
+                try:
+                    async with page.expect_file_chooser(timeout=5000) as fc_info:
+                        await upload_button.click()
+                    file_chooser = await fc_info.value
+                    await file_chooser.set_files(file_path)
+                except Error:
+                    # file chooser 未触发，降级到直注入
+                    upload_button = None
+
+            if upload_button is None:
+                # 降级：直接向隐藏 file input 注入文件
+                file_input_selectors = [
+                    "input[type='file'][accept*='video']",
+                    "input[type='file']",
+                    "div[class*='upload'] input[type='file']",
+                ]
+                if not await self._upload_file_to_first(
+                    page, file_input_selectors, file_path, timeout=15000
+                ):
+                    self.logger.error("未找到上传入口（按钮及 file input 均未命中）")
+                    return False
 
             await page.wait_for_timeout(300)
-
-            new_feature_button = page.get_by_role("button", name="Skip")
-            if await new_feature_button.count() > 0:
-                await new_feature_button.click()
+            skip_btn = page.get_by_role("button", name="Skip")
+            if await skip_btn.count() > 0:
+                await skip_btn.click()
 
             self.logger.info("视频文件上传成功")
             return True
@@ -120,64 +158,21 @@ class KuaiShouUploader(BasePublisher):
             return False
 
     async def _wait_for_upload_complete(self, page: Page) -> bool:
-        """
-        等待视频上传完成
-
-        Args:
-            page: 页面实例
-
-        Returns:
-            是否成功完成视频上传
-        """
-        max_retries = 60
-        retry_count = 0
-
-        # 使用更精确的选择器和多种检测方法
-        upload_complete_selectors = [
-            "#work-description-edit",  # 视频信息编辑区域
-            "div.upload-success",  # 上传成功标记
-            "button.publish-btn:visible",  # 发布按钮可见
+        complete_selectors = [
+            "#work-description-edit",
+            "div.upload-success",
         ]
 
-        while retry_count < max_retries:
-            try:
-                # 方法1: 检查"上传中"文本是否消失
-                uploading_count = await page.locator("text=上传中").count()
-                if uploading_count == 0:
-                    # 方法2: 检查上传完成的标记是否出现
-                    for selector in upload_complete_selectors:
-                        try:
-                            element = page.locator(selector)
-                            if (
-                                await element.count() > 0
-                                and await element.first.is_visible()
-                            ):
-                                self.logger.info("视频上传完毕")
-                                return True
-                        except Error:
-                            continue
-
-                    # 如果"上传中"消失但其他标记未出现，继续等待
-                    if retry_count % 10 == 0:
-                        self.logger.info("正在上传视频中...")
-
-                # 动态调整等待时间，减少资源占用
-                if retry_count < 20:
-                    await page.wait_for_timeout(500)  # 前20秒每秒检查一次
-                else:
-                    await page.wait_for_timeout(1000)  # 20秒后每2秒检查一次
-
-            except Exception as e:
-                self.logger.warning(f"检查上传状态时发生错误: {e}")
-                await page.wait_for_timeout(1500)
-
-            retry_count += 1
-
-        if retry_count == max_retries:
-            self.logger.warning("超过最大重试次数，视频上传可能未完成。")
+        async def check() -> bool:
+            for sel in complete_selectors:
+                el = page.locator(sel)
+                if await el.count() > 0 and await el.first.is_visible():
+                    return True
             return False
 
-        return False
+        return await self._wait_for_condition(
+            check, timeout=120.0, interval=2.0, desc="upload_complete"
+        )
 
     async def _fill_video_info(
         self, page: Page, title: str = "", content: str = "", tags: List[str] = None
@@ -227,7 +222,7 @@ class KuaiShouUploader(BasePublisher):
                         # 标签添加失败不影响整体上传
                         continue
 
-            self.logger.info(f"成功添加内容和Tag: {added_tags_count}/{len(tags)}")
+            self.logger.info(f"成功添加内容和Tag: {added_tags_count}/{len(tags or [])}")
             return True
         except Exception as e:
             self.logger.error(f"填写视频信息时出错: {e}")

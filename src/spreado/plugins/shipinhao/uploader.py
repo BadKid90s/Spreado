@@ -1,24 +1,33 @@
+"""视频号上传器。
+
+wujie 微前端将内容放在 shadow DOM 内，Playwright CSS locator 无法穿透。
+本模块通过 CDP + evaluate 在 shadow root 内操作所有元素。
+"""
+
+from __future__ import annotations
+
+import re
+import time
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
-import re
+from typing import Any, List, Optional
 
-from playwright.async_api import Page, Error
+from playwright.async_api import Page
 
 from spreado.core.base_publisher import BasePublisher
 
+_SHADOW_EVAL = """
+() => {
+    const w = document.querySelector('wujie-app');
+    const s = w && w.shadowRoot;
+    if (!s) return null;
+    return %s;
+}
+"""
+
 
 def _format_str_for_short_title(origin_title: str) -> str:
-    """
-    格式化短标题
-
-    Args:
-        origin_title: 原始标题
-
-    Returns:
-        格式化后的短标题
-    """
-    allowed_special_chars = "《》“”:+?%°"
+    allowed_special_chars = "《》" ":+?%°"
     filtered_chars = [
         (
             char
@@ -27,20 +36,16 @@ def _format_str_for_short_title(origin_title: str) -> str:
         )
         for char in origin_title
     ]
-    formatted_string = "".join(filtered_chars)
-
-    if len(formatted_string) > 16:
-        formatted_string = formatted_string[:16]
-    elif len(formatted_string) < 6:
-        formatted_string += " " * (6 - len(formatted_string))
-
-    return formatted_string
+    s = "".join(filtered_chars)
+    if len(s) > 16:
+        s = s[:16]
+    elif len(s) < 6:
+        s += " " * (6 - len(s))
+    return s
 
 
 class ShiPinHaoUploader(BasePublisher):
-    """
-    视频号上传器
-    """
+    """视频号上传器。"""
 
     @property
     def platform_name(self) -> str:
@@ -71,6 +76,90 @@ class ShiPinHaoUploader(BasePublisher):
     def _authed_selectors(self) -> List[str]:
         return ["div.input-editor", 'button:has-text("发表")']
 
+    # ---------------------------------------------------------------- shadow DOM helpers
+
+    async def _shadow_eval(self, page: Page, js: str) -> Any:
+        """在 wujie shadow root 上下文执行 JS 并返回结果。"""
+        return await page.evaluate(_SHADOW_EVAL % js)
+
+    async def _shadow_wait(
+        self, page: Page, selector: str, timeout: float = 20.0
+    ) -> bool:
+        """轮询等待 shadow DOM 内出现 selector 对应的元素。"""
+        deadline = time.monotonic() + timeout
+        expr = f"!!s.querySelector('{selector}')"
+        while time.monotonic() < deadline:
+            try:
+                if await self._shadow_eval(page, expr):
+                    return True
+            except Exception:
+                pass
+            await page.wait_for_timeout(500)
+        return False
+
+    # ---------------------------------------------------------------- CDP file injection
+
+    async def _cdp_set_file(self, page: Page, selector: str, file_path: str) -> bool:
+        """向 wujie shadow DOM 内的 file input 注入文件。
+
+        使用 CDP Runtime.callFunctionOn 将文件数据作为独立参数传入，
+        构造 File + DataTransfer 写入 input.files 并 dispatch change 事件。
+        """
+        import base64
+
+        file_path_str = str(Path(file_path).resolve())
+        file_bytes = Path(file_path_str).read_bytes()
+        b64 = base64.b64encode(file_bytes).decode()
+        filename = Path(file_path_str).name
+
+        cdp = await page.context.new_cdp_session(page)
+        try:
+            # 获取全局对象引用作为 callFunctionOn 的 receiver
+            global_result = await cdp.send(
+                "Runtime.evaluate",
+                {
+                    "expression": "globalThis",
+                    "returnByValue": False,
+                },
+            )
+            object_id = global_result["result"].get("objectId")
+            if not object_id:
+                return False
+
+            result = await cdp.send(
+                "Runtime.callFunctionOn",
+                {
+                    "objectId": object_id,
+                    "functionDeclaration": f"""function(b64Data, fname) {{
+                    const w = document.querySelector('wujie-app');
+                    const s = w && w.shadowRoot;
+                    if (!s) return {{ ok: false, reason: 'no_shadow' }};
+                    const input = s.querySelector('{selector}');
+                    if (!input) return {{ ok: false, reason: 'no_input' }};
+                    const byteStr = atob(b64Data);
+                    const arr = new Uint8Array(byteStr.length);
+                    for (let i = 0; i < byteStr.length; i++) arr[i] = byteStr.charCodeAt(i);
+                    const file = new File([arr], fname, {{ type: 'video/mp4' }});
+                    const dt = new DataTransfer();
+                    dt.items.add(file);
+                    input.files = dt.files;
+                    input.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                    return {{ ok: true, count: input.files.length }};
+                }}""",
+                    "arguments": [
+                        {"type": "string", "value": b64},
+                        {"type": "string", "value": filename},
+                    ],
+                    "returnByValue": True,
+                },
+            )
+            value = result.get("result", {}).get("value", {})
+            return value.get("ok") is True
+        finally:
+            await cdp.detach()
+
+    # ---------------------------------------------------------------- 主流程
+
     async def _upload_video(
         self,
         page: Page,
@@ -87,12 +176,13 @@ class ShiPinHaoUploader(BasePublisher):
                     await page.goto(self.publish_url)
                     try:
                         await page.wait_for_url(self.publish_url, timeout=5000)
-                    except Error:
+                    except Exception:
                         pass
-                    loading = page.locator(
-                        ".finder-page.PostCreate #container-wrap div.wrap"
-                    )
-                    await loading.wait_for(state="hidden", timeout=30000)
+                    # 等待 wujie shadow DOM 内容渲染
+                    if not await self._shadow_wait(
+                        page, 'input[type="file"]', timeout=20
+                    ):
+                        raise RuntimeError("wujie shadow DOM 未渲染 upload 区域")
 
                 with self.logger.step("upload_video_file", file=str(file_path)):
                     if not await self._upload_video_file(page, file_path):
@@ -122,439 +212,259 @@ class ShiPinHaoUploader(BasePublisher):
                         return False
 
                 with self.logger.step("publish_video"):
-                    if not await self._publish_video(page, False):
+                    if not await self._publish_video(page):
                         return False
             return True
         except Exception as e:
             self.logger.error("upload_video 异常", reason=str(e)[:200])
             return False
 
+    # ---------------------------------------------------------------- 子步骤
+
     async def _upload_video_file(self, page: Page, file_path: str | Path) -> bool:
-        """
-        上传视频文件
+        ok = await self._cdp_set_file(page, 'input[type="file"]', str(file_path))
+        if ok:
+            self.logger.info("视频文件已注入")
+        else:
+            self.logger.error("文件注入失败：未找到 shadow DOM 内的 file input")
+        return ok
 
-        Args:
-            page: 页面实例
-            file_path: 视频文件路径
+    async def _wait_for_upload_complete(self, page: Page) -> bool:
+        """轮询直到发表按钮可点击（非 disabled），或出现预览/编辑区。"""
 
-        Returns:
-            是否成功上传视频文件
-        """
-        # 保存文件路径用于错误处理
-        self.file_path = file_path
-
-        # 首先尝试找到并点击上传按钮
-        upload_button_selectors = [
-            ".finder-card.wrap",
-            "div.upload",
-            "div.upload-area",
-            'button:has-text("上传")',
-            'div:has-text("点击上传")',
-            'div:has-text("选择视频")',
-        ]
-
-        # 尝试点击上传按钮
-        for upload_selector in upload_button_selectors:
+        async def check() -> bool:
             try:
-                self.logger.info(f"尝试点击上传按钮: {upload_selector}")
-                upload_element = page.locator(upload_selector)
-                if await upload_element.count() > 0:
-                    # 如果找到多个元素，只点击第一个
-                    if await upload_element.count() > 1:
-                        self.logger.warning(
-                            f"找到多个匹配元素，点击第一个: {upload_selector}"
-                        )
-                        await upload_element.first.click()
-                    else:
-                        await upload_element.click()
-                    self.logger.info(f"已点击上传按钮: {upload_selector}")
-                    await page.wait_for_timeout(2000)  # 等待可能的弹窗或文件选择器
-                    break
-            except Exception as e:
-                self.logger.warning(f"点击上传按钮 {upload_selector} 失败: {e}")
+                result = await page.evaluate("""
+() => {
+    const w = document.querySelector('wujie-app');
+    const s = w && w.shadowRoot;
+    if (!s) return null;
+    const btn = s.querySelector('button.weui-desktop-btn_primary');
+    const progress = s.querySelector('[class*="progress"]');
+    const editor = s.querySelector('.input-editor');
+    if (btn && !btn.className.includes('disabled')) return true;
+    if (editor && !progress) return true;
+    return false;
+}
+""")
+                return result is True
+            except Exception:
+                return False
 
-        # 尝试多种定位方式查找文件输入框
-        file_input_selectors = [
-            'input[type="file"][accept="video/*"]',
-        ]
-
-        for selector in file_input_selectors:
-            try:
-                self.logger.info(f"尝试使用选择器查找文件输入框: {selector}")
-                file_input = page.locator(selector)
-
-                # 对于可能隐藏的输入框，使用attached状态而不是visible
-                await file_input.wait_for(state="attached", timeout=5000)
-
-                # 尝试直接设置文件
-                await file_input.set_input_files(file_path)
-                self.logger.info(f"文件上传输入框找到并上传成功: {selector}")
-                return True
-            except Exception as e:
-                self.logger.warning(f"选择器 {selector} 查找失败: {e}")
-                continue
-
-        self.logger.error("选择器查找失败，无法上传视频文件")
-        return False
+        return await self._wait_for_condition(
+            check, timeout=120.0, interval=2.0, desc="upload_complete"
+        )
 
     async def _fill_video_info(
         self, page: Page, title: str = "", content: str = "", tags: List[str] = None
     ) -> bool:
-        """
-        填写视频信息
-
-        Args:
-            page: 页面实例
-            title: 视频标题
-            content: 视频描述
-            tags: 视频标签列表
-
-        Returns:
-            是否成功填写视频信息
-        """
         try:
-            await page.locator("div.input-editor").click()
+            # 点击编辑器获取焦点
+            await self._shadow_eval(
+                page,
+                """
+(() => { s.querySelector('.input-editor').click(); })()
+""",
+            )
+            await page.wait_for_timeout(500)
+
+            # 输入标题
             await page.keyboard.type(title)
             await page.keyboard.press("Enter")
+            await page.wait_for_timeout(300)
 
+            # 输入正文
             await page.keyboard.type(content)
             await page.keyboard.press("Enter")
+            await page.wait_for_timeout(300)
 
+            # 输入标签
             if tags:
                 for tag in tags:
-                    if not tag.startswith("#"):
-                        await page.keyboard.type("#" + tag)
-                    else:
-                        await page.keyboard.type(tag)
+                    tag_text = tag if tag.startswith("#") else "#" + tag
+                    await page.keyboard.type(tag_text)
                     await page.keyboard.press("Space")
+                    await page.wait_for_timeout(300)
 
-            self.logger.info(f"成功添加hashtag: {len(tags)}")
+            self.logger.info("标题与标签已填充", total=len(tags or []))
             return True
         except Exception as e:
-            self.logger.error(f"填写视频信息时出错: {e}")
+            self.logger.error("填写视频信息失败", reason=str(e)[:200])
             return False
 
     async def _set_thumbnail(
         self, page: Page, thumbnail_path: Optional[str | Path]
     ) -> bool:
-        """
-        设置视频封面
-
-        Args:
-            page: 页面实例
-            thumbnail_path: 封面图片路径
-        """
         if not thumbnail_path:
+            self.logger.info("无封面，跳过")
+            return True
+        if not Path(thumbnail_path).exists():
+            self.logger.warning("封面文件不存在，跳过", path=str(thumbnail_path))
             return True
 
-        self.logger.info("正在设置视频封面...")
-
-        # 1. 点击个人主页卡片
-        await page.click('div.tips-wrap:has(div.cover-tips:has-text("个人主页卡片"))')
-        self.logger.info("已点击个人主页卡片")
-
-        # 2. 等待模态框出现和上传封面元素可见
-        await page.wait_for_selector("div.single-cover-uploader-wrap", timeout=10000)
-        await page.wait_for_selector(
-            'div.single-cover-uploader-wrap div.text-wrap:has-text("上传封面")',
-            timeout=5000,
-        )
-        self.logger.info("模态框已打开，上传封面元素可见")
-
-        # 3. 找到文件input元素并设置图片
         try:
+            # 1) 点击个人主页卡片
+            clicked = await self._shadow_eval(
+                page,
+                """
+(() => {
+    const el = s.querySelector('div.tips-wrap div.cover-tips');
+    if (el && el.innerText.includes('个人主页卡片')) {
+        el.closest('.tips-wrap').click();
+        return true;
+    }
+    return false;
+})()
+""",
+            )
+            if not clicked:
+                self.logger.warning("未找到个人主页卡片入口，跳过封面")
+                return True
+            self.logger.info("已点击个人主页卡片")
 
-            # 找到隐藏的文件输入框
-            file_input_selector = 'div.single-cover-uploader-wrap input[type="file"][accept="image/jpeg,image/jpg,image/png"]'
-            await page.locator(file_input_selector).set_input_files(thumbnail_path)
+            # 2) 等待上传封面元素
+            await self._shadow_wait(page, "div.single-cover-uploader-wrap", timeout=10)
+
+            # 3) 通过 CDP 注入封面图片
+            ok = await self._cdp_set_file(
+                page,
+                'div.single-cover-uploader-wrap input[type="file"][accept*="image"]',
+                str(thumbnail_path),
+            )
+            if not ok:
+                self.logger.error("封面图片注入失败")
+                return False
             self.logger.info("封面图片已选择")
 
-            # 等待裁剪对话框出现
-            await page.wait_for_selector(
-                'div.weui-desktop-dialog__wrp:has(h3:has-text("裁剪封面图"))',
-                state="visible",
-                timeout=10000,
+            # 4) 等待裁剪对话框出现
+            await self._shadow_wait(
+                page, "div.weui-desktop-dialog__wrp:visible", timeout=10
             )
-            self.logger.info("裁剪封面图对话框已打开")
+            await self._shadow_eval(
+                page,
+                """
+(() => {
+    const btns = s.querySelectorAll('div.cover-set-footer button');
+    for (const b of btns) { if (b.innerText.includes('确认')) { b.click(); break; } }
+})()
+""",
+            )
+            self.logger.info("封面设置完成")
+            await page.wait_for_timeout(2000)
+            return True
 
         except Exception as e:
-            self.logger.error(f"选择封面图片时出错: {e}")
+            self.logger.error("封面设置失败", reason=str(e)[:200])
             return False
-
-        # 4. 点击确认按钮关闭模态框
-        try:
-            # 更精确地定位裁剪封面图对话框中的确认按钮
-            confirm_button_selector = 'div.cover-set-footer button:has-text("确认")'
-            await page.locator(confirm_button_selector).click()
-            self.logger.info("已点击确认按钮")
-
-            # 等待模态框关闭
-            await page.wait_for_selector(
-                'div.weui-desktop-dialog__wrp:has(h3:has-text("裁剪封面图"))',
-                state="hidden",
-                timeout=10000,
-            )
-            self.logger.info("裁剪封面图对话框已关闭")
-
-        except Exception as e:
-            self.logger.error(f"点击确认按钮时出错: {e}")
-            return False
-
-        # 5. 监听图片URL发生变化，确认封面设置成功
-        try:
-            # 等待封面图片加载完成
-            await page.wait_for_selector(
-                "div.vertical-cover-wrap img.cover-img-horizontal[src]", timeout=10000
-            )
-
-            # 获取封面图片的URL
-            cover_image_url = await page.locator(
-                "div.vertical-cover-wrap img.cover-img-horizontal"
-            ).get_attribute("src")
-            if cover_image_url:
-                self.logger.info(
-                    f"视频封面设置完成！封面图片URL: {cover_image_url[:50]}..."
-                )
-                return True
-            else:
-                self.logger.error("封面图片URL为空")
-                return False
-
-        except Exception as e:
-            self.logger.error(f"验证封面图片设置时出错: {e}")
-            return False
-
-    async def _wait_for_upload_complete(self, page: Page) -> bool:
-        """
-        等待视频上传完成
-
-        Args:
-            page: 页面实例
-
-        Returns:
-            是否成功等待视频上传完成
-        """
-        max_wait_time = 300  # 最大等待时间，单位秒
-        wait_time = 0
-        retry_count = 0
-        max_retries = 3  # 最大重试次数
-
-        while wait_time < max_wait_time:
-            try:
-                try:
-                    publish_button = page.get_by_role("button", name="发表")
-                    button_class = await publish_button.get_attribute("class")
-
-                    if button_class and "weui-desktop-btn_disabled" not in button_class:
-                        self.logger.info("视频上传完毕")
-                        return True
-                    else:
-                        self.logger.info("正在上传视频中...")
-                except Error:
-                    self.logger.info("正在上传视频中...")
-
-                # 检查是否有上传错误
-                if (
-                    await page.locator("div.status-msg.error").count()
-                    and await page.locator(
-                        'div.media-status-content div.tag-inner:has-text("删除")'
-                    ).count()
-                ):
-                    if retry_count < max_retries:
-                        self.logger.error("发现上传出错了...准备重试")
-                        await self._handle_upload_error(page)
-                        retry_count += 1
-                        self.logger.info(f"重试次数: {retry_count}")
-                    else:
-                        self.logger.error("上传错误超过最大重试次数")
-                        return False
-
-                await page.wait_for_timeout(1000)
-                wait_time += 1
-
-            except Exception as e:
-                self.logger.error(f"等待上传完成时出错: {e}")
-                await page.wait_for_timeout(1000)
-                wait_time += 1
-
-        self.logger.error("视频上传超时")
-        return False
-
-    async def _handle_upload_error(self, page: Page):
-        """
-        处理上传错误
-
-        Args:
-            page: 页面实例
-        """
-        self.logger.info("视频出错了，重新上传中")
-        await page.locator(
-            'div.media-status-content div.tag-inner:has-text("删除")'
-        ).click()
-        await page.get_by_role("button", name="删除", exact=True).click()
-        file_input = page.locator('input[type="file"]')
-        await file_input.set_input_files(self.file_path)
 
     async def _set_schedule_time(self, page: Page, publish_date: datetime) -> bool:
-        """
-        设置定时发布时间
-
-        Args:
-            page: 页面实例
-            publish_date: 发布时间
-
-        Returns:
-            是否成功设置定时发布时间
-        """
         try:
-            self.logger.info(f"设置定时发布时间为: {publish_date}")
-
             # 点击定时选项
-            label_element = page.locator("label").filter(has_text="定时").nth(1)
-            await label_element.click()
-            self.logger.info("已点击定时选项")
-
-            # 打开日期选择器
-            await page.click('input[placeholder="请选择发表时间"]')
-            self.logger.info("已打开日期选择器")
-
-            # 设置月份
-            str_month = (
-                str(publish_date.month)
-                if publish_date.month > 9
-                else "0" + str(publish_date.month)
+            await self._shadow_eval(
+                page,
+                """
+(() => {
+    const labels = s.querySelectorAll('label');
+    for (const l of labels) { if (l.innerText.includes('定时')) { l.click(); break; } }
+})()
+""",
             )
-            current_month = str_month + "月"
-            page_month = await page.inner_text(
-                'span.weui-desktop-picker__panel__label:has-text("月")'
+            await page.wait_for_timeout(500)
+
+            # 日期选择
+            day_str = str(publish_date.day)
+            await self._shadow_eval(
+                page,
+                f"""
+(() => {{
+    const cells = s.querySelectorAll('table a');
+    for (const c of cells) {{
+        if (!c.className.includes('disabled') && c.innerText.trim() === '{day_str}') {{
+            c.click(); break;
+        }}
+    }}
+}})()
+""",
             )
+            await page.wait_for_timeout(500)
 
-            if page_month != current_month:
-                await page.click("button.weui-desktop-btn__icon__right")
-                self.logger.info(f"已将月份切换到: {current_month}")
-
-            # 设置日期
-            elements = await page.query_selector_all(
-                "table.weui-desktop-picker__table a"
-            )
-            day_set = False
-            for element in elements:
-                if "weui-desktop-picker__disabled" in await element.evaluate(
-                    "el => el.className"
-                ):
-                    continue
-                text = await element.inner_text()
-                if text.strip() == str(publish_date.day):
-                    await element.click()
-                    day_set = True
-                    self.logger.info(f"已选择日期: {publish_date.day}")
-                    break
-
-            if not day_set:
-                self.logger.error(f"无法找到日期: {publish_date.day}")
-                return False
-
-            # 设置时间
-            await page.click('input[placeholder="请选择时间"]')
-            await page.keyboard.press("Control+KeyA")
-            # 格式化时间为HH:MM
+            # 时间输入
             time_str = publish_date.strftime("%H:%M")
+            await self._shadow_eval(
+                page,
+                """
+(() => {
+    const inp = s.querySelector('input[placeholder*="时间"]');
+    if (inp) { inp.click(); }
+})()
+""",
+            )
+            await page.keyboard.press("Control+KeyA")
             await page.keyboard.type(time_str)
-            await page.locator("div.input-editor").click()
-            self.logger.info(f"已设置时间: {time_str}")
+            await page.keyboard.press("Enter")
+            await page.wait_for_timeout(500)
 
             self.logger.info("定时发布时间设置完成")
             return True
-
         except Exception as e:
-            self.logger.error(f"设置定时发布时间时出错: {e}")
+            self.logger.error("定时发布设置失败", reason=str(e)[:200])
             return False
 
     async def _add_short_title(self, page: Page, title: str) -> bool:
-        """
-        添加短标题
-
-        Args:
-            page: 页面实例
-            title: 视频标题
-
-        Returns:
-            是否成功添加短标题
-        """
         try:
-            short_title_element = (
-                page.get_by_text("短标题", exact=True)
-                .locator("..")
-                .locator("xpath=following-sibling::div")
-                .locator('span input[type="text"]')
+            short_title = _format_str_for_short_title(title)
+            await self._shadow_eval(
+                page,
+                f"""
+(() => {{
+    const els = s.querySelectorAll('span input[type="text"]');
+    for (const inp of els) {{
+        const wrap = inp.closest('.form-item');
+        if (wrap && wrap.innerText.includes('短标题')) {{
+            inp.focus(); inp.value = '{short_title}';
+            inp.dispatchEvent(new Event('input', {{bubbles: true}}));
+            return;
+        }}
+    }}
+}})()
+""",
             )
-            if await short_title_element.count():
-                short_title = _format_str_for_short_title(title)
-                await short_title_element.fill(short_title)
-                self.logger.info(f"已添加短标题: {short_title}")
+            self.logger.info("短标题已添加", title=short_title)
             return True
         except Exception as e:
-            self.logger.error(f"添加短标题时出错: {e}")
+            self.logger.error("添加短标题失败", reason=str(e)[:200])
             return False
 
-    async def _publish_video(self, page: Page, is_draft: bool = False) -> bool:
-        """
-        发布视频
+    async def _publish_video(self, page: Page) -> bool:
+        try:
+            clicked = await self._shadow_eval(
+                page,
+                """
+(() => {
+    const btns = s.querySelectorAll('div.form-btns button');
+    for (const b of btns) { if (b.innerText.includes('发表') && !b.className.includes('disabled')) {
+        b.click(); return true;
+    }}
+    return false;
+})()
+""",
+            )
+            if not clicked:
+                self.logger.error("未找到可点击的发表按钮")
+                return False
 
-        Args:
-            page: 页面实例
-            is_draft: 是否保存为草稿
+            # 等待跳转到 /post/list（发布成功）
+            pattern = re.compile(r"/post/list")
+            deadline = time.monotonic() + 15
+            while time.monotonic() < deadline:
+                if pattern.search(page.url):
+                    self.logger.info("视频发布成功")
+                    return True
+                await page.wait_for_timeout(1000)
 
-        Returns:
-            是否成功发布视频或保存草稿
-        """
-        max_retries = 10  # 最大重试次数
-        retry_count = 0
-        publish_pattern = re.compile(r"/post/list")
-        draft_pattern = re.compile(r"/post/list|draft")
+            self.logger.warning("发布跳转超时，检查 URL", url=page.url)
+            return bool(pattern.search(page.url))
 
-        while retry_count < max_retries:
-            try:
-                if is_draft:
-                    self.logger.info("正在保存为草稿...")
-                    draft_button = page.locator(
-                        'div.form-btns button:has-text("保存草稿")'
-                    )
-                    if await draft_button.count():
-                        if await self._click_and_wait_for_url(
-                            page, draft_button, draft_pattern, timeout=5000
-                        ):
-                            self.logger.info("视频草稿保存成功")
-                            return True
-
-                else:
-                    self.logger.info("正在发布视频...")
-                    publish_button = page.locator(
-                        'div.form-btns button:has-text("发表")'
-                    )
-                    if await publish_button.count():
-                        if await self._click_and_wait_for_url(
-                            page, publish_button, publish_pattern, timeout=5000
-                        ):
-                            self.logger.info("视频发布成功")
-                            return True
-
-            except Error as e:
-                self.logger.warning(f"发布视频时出错: {e}")
-
-                # 检查当前URL是否包含成功标志
-                current_url = page.url
-                if is_draft:
-                    if "post/list" in current_url or "draft" in current_url:
-                        self.logger.info("视频草稿保存成功")
-                        return True
-                else:
-                    if "post/list" in current_url:
-                        self.logger.info("视频发布成功")
-                        return True
-
-            await page.wait_for_timeout(1000)
-            retry_count += 1
-
-        self.logger.error("超过最大重试次数，视频发布失败")
-        return False
+        except Exception as e:
+            self.logger.error("发布异常", reason=str(e)[:200])
+            return False
