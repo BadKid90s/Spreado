@@ -48,6 +48,10 @@ class ShiPinHaoUploader(BasePublisher):
     """视频号上传器。"""
 
     @property
+    def _upload_headless(self) -> bool:
+        return True
+
+    @property
     def platform_name(self) -> str:
         return "shipinhao"
 
@@ -99,7 +103,26 @@ class ShiPinHaoUploader(BasePublisher):
 
     # ---------------------------------------------------------------- CDP file injection
 
-    async def _cdp_set_file(self, page: Page, selector: str, file_path: str) -> bool:
+    _MIME_MAP = {
+        ".mp4": "video/mp4",
+        ".mov": "video/quicktime",
+        ".avi": "video/x-msvideo",
+        ".mkv": "video/x-matroska",
+        ".webm": "video/webm",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".gif": "image/gif",
+        ".webp": "image/webp",
+    }
+
+    async def _cdp_set_file(
+        self,
+        page: Page,
+        selector: str,
+        file_path: str,
+        mime_type: Optional[str] = None,
+    ) -> bool:
         """向 wujie shadow DOM 内的 file input 注入文件。
 
         使用 CDP Runtime.callFunctionOn 将文件数据作为独立参数传入，
@@ -111,6 +134,9 @@ class ShiPinHaoUploader(BasePublisher):
         file_bytes = Path(file_path_str).read_bytes()
         b64 = base64.b64encode(file_bytes).decode()
         filename = Path(file_path_str).name
+        if mime_type is None:
+            ext = Path(file_path_str).suffix.lower()
+            mime_type = self._MIME_MAP.get(ext, "application/octet-stream")
 
         cdp = await page.context.new_cdp_session(page)
         try:
@@ -139,7 +165,7 @@ class ShiPinHaoUploader(BasePublisher):
                     const byteStr = atob(b64Data);
                     const arr = new Uint8Array(byteStr.length);
                     for (let i = 0; i < byteStr.length; i++) arr[i] = byteStr.charCodeAt(i);
-                    const file = new File([arr], fname, {{ type: 'video/mp4' }});
+                    const file = new File([arr], fname, {{ type: '{mime_type}' }});
                     const dt = new DataTransfer();
                     dt.items.add(file);
                     input.files = dt.files;
@@ -158,6 +184,62 @@ class ShiPinHaoUploader(BasePublisher):
         finally:
             await cdp.detach()
 
+    # ---------------------------------------------------------------- 发布页就绪（微前端偶发「页面加载失败」）
+
+    async def _try_click_reload_on_failed_shell(self, page: Page) -> bool:
+        """助手外壳常见文案「页面加载失败」+「重新加载」，点击后子 iframe 会重拉。"""
+        targets = [page]
+        try:
+            targets.extend(list(page.frames))
+        except Exception:
+            pass
+        for target in targets:
+            try:
+                txt = await target.evaluate(
+                    "() => (document.body && document.body.innerText) || ''"
+                )
+            except Exception:
+                continue
+            if "页面加载失败" not in txt:
+                continue
+            try:
+                btn = target.get_by_text("重新加载", exact=True)
+                if await btn.count() > 0:
+                    await btn.first.click(timeout=8000)
+                    self.logger.info("视频号助手 shell：已点击重新加载")
+                    await page.wait_for_timeout(4000)
+                    return True
+            except Exception:
+                continue
+        return False
+
+    async def _wait_publish_shell_ready(self, page: Page) -> bool:
+        """goto 之后等待 shadow 内出现上传 input；必要时点击 shell 的重新加载并重试。"""
+        for cycle in range(4):
+            await self._try_click_reload_on_failed_shell(page)
+            try:
+                await page.wait_for_selector(
+                    "wujie-app",
+                    state="attached",
+                    timeout=15000,
+                )
+            except Exception:
+                pass
+            if await self._shadow_wait(page, 'input[type="file"]', timeout=45):
+                return True
+            if cycle < 3:
+                self.logger.warning(
+                    "视频号发布页未就绪，整页刷新重试",
+                    cycle=cycle + 1,
+                )
+                await page.goto(
+                    self.publish_url,
+                    timeout=60000,
+                    wait_until="load",
+                )
+                await page.wait_for_timeout(5000)
+        return False
+
     # ---------------------------------------------------------------- 主流程
 
     async def _upload_video(
@@ -173,15 +255,17 @@ class ShiPinHaoUploader(BasePublisher):
         try:
             with self.logger.step("upload_video", title=title, file=str(file_path)):
                 with self.logger.step("goto_upload_page"):
-                    await page.goto(self.publish_url)
+                    await page.goto(
+                        self.publish_url,
+                        timeout=60000,
+                        wait_until="load",
+                    )
                     try:
                         await page.wait_for_url(self.publish_url, timeout=5000)
                     except Exception:
                         pass
-                    # 等待 wujie shadow DOM 内容渲染
-                    if not await self._shadow_wait(
-                        page, 'input[type="file"]', timeout=20
-                    ):
+                    await page.wait_for_timeout(5000)
+                    if not await self._wait_publish_shell_ready(page):
                         raise RuntimeError("wujie shadow DOM 未渲染 upload 区域")
 
                 with self.logger.step("upload_video_file", file=str(file_path)):
@@ -230,7 +314,7 @@ class ShiPinHaoUploader(BasePublisher):
         return ok
 
     async def _wait_for_upload_complete(self, page: Page) -> bool:
-        """轮询直到发表按钮可点击（非 disabled），或出现预览/编辑区。"""
+        """轮询直到发表按钮可点击（非 disabled），且封面区域就绪。"""
 
         async def check() -> bool:
             try:
@@ -242,8 +326,9 @@ class ShiPinHaoUploader(BasePublisher):
     const btn = s.querySelector('button.weui-desktop-btn_primary');
     const progress = s.querySelector('[class*="progress"]');
     const editor = s.querySelector('.input-editor');
-    if (btn && !btn.className.includes('disabled')) return true;
-    if (editor && !progress) return true;
+    const coverReady = !!s.querySelector('div.tips-wrap');
+    if (btn && !btn.className.includes('disabled') && coverReady) return true;
+    if (editor && !progress && coverReady) return true;
     return false;
 }
 """)
@@ -303,27 +388,46 @@ class ShiPinHaoUploader(BasePublisher):
             return True
 
         try:
-            # 1) 点击个人主页卡片
-            clicked = await self._shadow_eval(
-                page,
-                """
-(() => {
+            # 1) 等待封面区域渲染（无头模式下可能较慢）
+            await self._shadow_wait(page, "div.tips-wrap", timeout=15)
+
+            # 2) 点击个人主页卡片（重试：无头模式下可能需要滚动或等待）
+            clicked = False
+            for attempt in range(4):
+                clicked = await page.evaluate("""
+() => {
+    const w = document.querySelector('wujie-app');
+    const s = w && w.shadowRoot;
+    if (!s) return false;
     const el = s.querySelector('div.tips-wrap div.cover-tips');
     if (el && el.innerText.includes('个人主页卡片')) {
         el.closest('.tips-wrap').click();
         return true;
     }
     return false;
-})()
-""",
-            )
+}
+""")
+                if clicked:
+                    break
+                if attempt < 3:
+                    # 无头模式下封面区域可能需要滚动才可见
+                    await page.evaluate("""
+() => {
+    const w = document.querySelector('wujie-app');
+    const s = w && w.shadowRoot;
+    if (!s) return;
+    const el = s.querySelector('div.tips-wrap');
+    if (el) el.scrollIntoView({ block: 'center' });
+}
+""")
+                    await page.wait_for_timeout(2000)
             if not clicked:
                 self.logger.warning("未找到个人主页卡片入口，跳过封面")
                 return True
             self.logger.info("已点击个人主页卡片")
 
-            # 2) 等待上传封面元素
-            await self._shadow_wait(page, "div.single-cover-uploader-wrap", timeout=10)
+            # 3) 等待上传封面元素
+            await self._shadow_wait(page, "div.single-cover-uploader-wrap", timeout=15)
 
             # 3) 通过 CDP 注入封面图片
             ok = await self._cdp_set_file(
@@ -337,18 +441,47 @@ class ShiPinHaoUploader(BasePublisher):
             self.logger.info("封面图片已选择")
 
             # 4) 等待裁剪对话框出现
-            await self._shadow_wait(
-                page, "div.weui-desktop-dialog__wrp:visible", timeout=10
-            )
-            await self._shadow_eval(
-                page,
-                """
-(() => {
+            await self._shadow_wait(page, "div.weui-desktop-dialog__wrp", timeout=15)
+            # 确认对话框实际可见（querySelector 不支持 :visible）
+            for _ in range(6):
+                visible = await page.evaluate("""
+() => {
+    const w = document.querySelector('wujie-app');
+    const s = w && w.shadowRoot;
+    if (!s) return false;
+    const d = s.querySelector('div.weui-desktop-dialog__wrp');
+    if (!d) return false;
+    const st = getComputedStyle(d);
+    return st.display !== 'none' && st.visibility !== 'hidden' && st.opacity !== '0';
+}
+""")
+                if visible:
+                    break
+                await page.wait_for_timeout(500)
+
+            # 5) 点击确认按钮
+            confirmed = await page.evaluate("""
+() => {
+    const w = document.querySelector('wujie-app');
+    const s = w && w.shadowRoot;
+    if (!s) return false;
     const btns = s.querySelectorAll('div.cover-set-footer button');
-    for (const b of btns) { if (b.innerText.includes('确认')) { b.click(); break; } }
-})()
-""",
-            )
+    for (const b of btns) { if (b.innerText.includes('确认')) { b.click(); return true; } }
+    return false;
+}
+""")
+            if not confirmed:
+                # 无头模式下对话框渲染慢，等一下再试
+                await page.wait_for_timeout(3000)
+                await page.evaluate("""
+() => {
+    const w = document.querySelector('wujie-app');
+    const s = w && w.shadowRoot;
+    if (!s) return;
+    const btns = s.querySelectorAll('div.cover-set-footer button');
+    for (const b of btns) { if (b.innerText.includes('确认')) { b.click(); return; } }
+}
+""")
             self.logger.info("封面设置完成")
             await page.wait_for_timeout(2000)
             return True

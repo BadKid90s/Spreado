@@ -56,6 +56,14 @@ class BaseUploader(ABC):
         """
         return None
 
+    @property
+    def _upload_headless(self) -> bool:
+        """upload_video_flow 是否在加载 cookie 后使用无头浏览器上传。
+
+        子类可覆盖；默认 True（无头）。若平台在无头模式下渲染异常，返回 False。
+        """
+        return True
+
     # ---------------------------------------------------------------- 抽象 API
 
     @property
@@ -203,8 +211,9 @@ class BaseUploader(ABC):
             with self.logger.step("upload_video_flow", title=title) as step:
                 cookie_ok = await self.verify_cookie_flow(auto_login=auto_login)
                 if cookie_ok:
-                    # cookie 有效，使用 headless 浏览器上传
-                    async with await StealthBrowser.create(headless=True) as browser:
+                    async with await StealthBrowser.create(
+                        headless=self._upload_headless
+                    ) as browser:
                         await browser.load_cookies_from_file(self.cookie_file_path)
                         async with await browser.new_page() as page:
                             await page.goto(self.publish_url)
