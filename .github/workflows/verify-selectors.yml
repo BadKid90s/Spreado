@@ -2,7 +2,7 @@ name: Verify Selectors
 
 on:
   schedule:
-    - cron: '17 3 * * *'  # 每日 UTC 03:17 (北京时间 11:17)
+    - cron: '17 3 * * 1'  # 每周一 UTC 03:17 (北京时间 11:17)
   workflow_dispatch:
   pull_request:
     paths:
@@ -25,7 +25,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v8
+        uses: astral-sh/setup-uv@v8.1.0
         with:
           enable-cache: true
 
