@@ -277,10 +277,14 @@ class KuaiShouUploader(BasePublisher):
                 publish_btn = page.get_by_text("发布", exact=True).first
             if await publish_btn.count() > 0:
                 await publish_btn.click(force=True)
-                await page.wait_for_timeout(800)
+                await page.wait_for_timeout(1500)
 
-            # 处理"确认发布"弹窗
-            confirm_btn = page.locator('div:has-text("确认发布")').first
+            # 处理"确认发布"弹窗（可能是 div 或 button）
+            confirm_btn = page.locator('button:has-text("确认发布"), div:has-text("确认发布")').first
+            try:
+                await confirm_btn.wait_for(state="visible", timeout=5000)
+            except Error:
+                pass
             if await confirm_btn.count() > 0 and await confirm_btn.is_visible():
                 return await self._click_and_wait_for_url(
                     page, confirm_btn, success_pattern, timeout=15000
