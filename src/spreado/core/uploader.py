@@ -38,6 +38,7 @@ class BaseUploader(ABC):
         self,
         logger: Optional[StepLogger] = None,
         cookie_file_path: str | Path | None = None,
+        headless: bool = True,
     ):
         self.logger = logger or get_uploader_logger(self.platform_name)
         if cookie_file_path is None:
@@ -46,6 +47,7 @@ class BaseUploader(ABC):
             )
         else:
             self.cookie_file_path = Path(cookie_file_path)
+        self._headless = headless
 
     @property
     def _browser_channel(self) -> Optional[str]:
@@ -58,10 +60,11 @@ class BaseUploader(ABC):
 
     @property
     def _headless_upload(self) -> bool:
-        """上传时是否使用 headless 浏览器。默认 True。
-        子类可覆盖为 False 以对抗反爬检测（如小红书）。
+        """上传时是否使用 headless 浏览器。默认 True，可通过构造参数 headless 覆盖。
+
+        子类可覆盖为 False 以对抗反爬检测，也可由 CLI --headed 参数控制。
         """
-        return True
+        return self._headless
 
     # ---------------------------------------------------------------- 抽象 API
 

@@ -50,10 +50,6 @@ class XiaoHongShuUploader(BasePublisher):
         # 上传页才会渲染的元素：视频上传 input + 顶部的"上传视频"按钮
         return ["input.upload-input", 'button:has-text("上传视频")']
 
-    @property
-    def _headless_upload(self) -> bool:
-        return True
-
     # ---------------------------------------------------------------- 主流程
 
     async def _upload_video(
