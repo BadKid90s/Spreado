@@ -648,9 +648,11 @@ class KuaiShouUploader(BasePublisher):
             await page.wait_for_timeout(1500)
 
             # 处理"确认发布"弹窗
-            confirm_btn = page.locator('button:has-text("确认发布"), div:has-text("确认发布")').first
+            confirm_btn = page.locator(
+                'button:has-text("确认发布"), div:has-text("确认发布")'
+            ).first
             try:
-                await confirm_btn.wait_for(state="visible", timeout=8000)
+                await confirm_btn.wait_for(state="visible", timeout=5000)
             except Error:
                 pass
             if await confirm_btn.count() > 0 and await confirm_btn.is_visible():
@@ -658,10 +660,17 @@ class KuaiShouUploader(BasePublisher):
                     page, confirm_btn, success_pattern, timeout=15000
                 )
 
+            # 无确认弹窗 = 直接发布成功，等待跳转
+            try:
+                await page.wait_for_url(success_pattern, timeout=10000)
+                return True
+            except Error:
+                pass
+
             if success_pattern.search(page.url):
                 return True
 
-            self.logger.error("未找到确认发布按钮")
+            self.logger.error("发布未跳转到管理页", url=page.url[:80])
             return False
         except Exception as e:
             self.logger.error("发布失败", reason=str(e)[:200])
