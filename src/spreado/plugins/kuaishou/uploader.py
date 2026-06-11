@@ -216,18 +216,40 @@ class KuaiShouUploader(BasePublisher):
 
         try:
             await self._dismiss_overlays(page)
-            # 向隐藏的 image file input 注入封面图片
-            if await self._upload_file_to_first(
+
+            # 1) 点击"封面设置"打开弹窗
+            cover_btn = page.get_by_text("封面设置").nth(1)
+            await cover_btn.wait_for(state="visible", timeout=10000)
+            await cover_btn.click(force=True)
+
+            # 2) 等待弹窗，点击"上传封面"
+            await page.wait_for_selector(
+                "div.ant-modal-body", timeout=10000, state="visible"
+            )
+            upload_btn = page.get_by_text("上传封面")
+            await upload_btn.wait_for(state="visible", timeout=10000)
+            await upload_btn.click(force=True)
+
+            # 3) 上传封面图片
+            if not await self._upload_file_to_first(
                 page,
-                ['input[type="file"][accept*="image"]', 'input[type="file"]'],
+                ["div[class*='upload'] input[type='file']", "input[type='file'][accept*='image']"],
                 thumbnail_path,
                 timeout=10000,
             ):
-                await page.wait_for_timeout(2000)
-                self.logger.info("封面图片已注入")
-                return True
-            self.logger.error("未找到封面图片上传 input")
-            return False
+                self.logger.error("未找到封面图片上传 input")
+                return False
+
+            await page.wait_for_timeout(2000)
+
+            # 4) 点击"确认"
+            confirm_btn = page.get_by_role("button", name="确认")
+            await confirm_btn.wait_for(state="visible", timeout=10000)
+            await confirm_btn.click(force=True)
+
+            await page.wait_for_timeout(1000)
+            self.logger.info("封面设置完成")
+            return True
         except Exception as e:
             self.logger.error("封面设置失败", reason=str(e)[:200])
             return False
