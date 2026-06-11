@@ -183,12 +183,15 @@ class KuaiShouUploader(BasePublisher):
             text_content = f"{title}\n{content}\n" if content else f"{title}\n"
             await page.keyboard.insert_text(text_content)
 
-            # 输入标签
+            # 输入标签 — 必须模拟键盘 Shift+3 输入 # 才能触发话题组件
             added = 0
             for tag in tags or []:
                 topic = tag.lstrip("#")
                 try:
-                    await page.keyboard.insert_text(f"#{topic}")
+                    await page.keyboard.down("Shift")
+                    await page.keyboard.press("Digit3")
+                    await page.keyboard.up("Shift")
+                    await page.keyboard.insert_text(topic)
                     await page.wait_for_timeout(300)
                     await page.keyboard.press("Enter")
                     added += 1
@@ -222,6 +225,8 @@ class KuaiShouUploader(BasePublisher):
                 pass
             if await cover_input.count() > 0:
                 await cover_input.set_input_files(thumbnail_path)
+                # 触发 change 事件确保 React 组件感知变更
+                await cover_input.dispatch_event("change")
                 await page.wait_for_timeout(2000)
                 self.logger.info("封面图片已注入")
                 return True
