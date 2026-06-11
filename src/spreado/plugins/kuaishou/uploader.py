@@ -89,10 +89,12 @@ class KuaiShouUploader(BasePublisher):
                         return False
 
                 with self.logger.step("fill_video_info", title=title):
+                    await self._dismiss_overlays(page)
                     if not await self._fill_video_info(page, title, content, tags):
                         return False
 
                 with self.logger.step("set_thumbnail", path=str(thumbnail_path or "")):
+                    await self._dismiss_overlays(page)
                     if not await self._set_thumbnail(page, thumbnail_path):
                         return False
 
@@ -169,8 +171,10 @@ class KuaiShouUploader(BasePublisher):
         self, page: Page, title: str = "", content: str = "", tags: List[str] = None,
     ) -> bool:
         try:
+            # 再次移除可能重新出现的遮罩
+            await self._dismiss_overlays(page)
             editor = page.locator("#work-description-edit")
-            await editor.click()
+            await editor.click(force=True)
             await page.wait_for_timeout(300)
 
             # 输入标题和正文
