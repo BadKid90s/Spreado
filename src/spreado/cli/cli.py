@@ -13,6 +13,10 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from typing import List
 
+# Windows GBK 兼容：强制 stdout 使用 UTF-8，避免 emoji 打印报错
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 from ..plugin_loader import get_plugin_loader
 from ..utils import get_logger
 

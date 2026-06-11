@@ -56,6 +56,13 @@ class BaseUploader(ABC):
         """
         return None
 
+    @property
+    def _headless_upload(self) -> bool:
+        """上传时是否使用 headless 浏览器。默认 True。
+        子类可覆盖为 False 以对抗反爬检测（如小红书）。
+        """
+        return True
+
     # ---------------------------------------------------------------- 抽象 API
 
     @property
@@ -131,13 +138,15 @@ class BaseUploader(ABC):
         策略：用户在浏览器中登录后，页面会跳转离开登录页。
         检测 positive DOM（authed 元素）或 negative DOM（登录表单消失）。
 
-        注意：若页面仍在 login_url 的同一 path（如扫码确认中），不强制跳转。
+        防抖机制：登录表单消失后等待 5 秒稳定期，避免 QR 扫码中间态误判。
         """
         await page.wait_for_timeout(3000)
 
         login_parsed = urlparse(self.login_url)
+        _no_login_since: float = 0.0  # 闭包变量：登录表单首次消失的时间戳
 
         async def check() -> bool:
+            nonlocal _no_login_since
             cur_url = page.url
             # Chrome 错误页 → 页面加载失败，继续等待
             if cur_url.startswith(("chrome-error://", "edge://")):
@@ -151,18 +160,19 @@ class BaseUploader(ABC):
                             return True
                     except Error:
                         continue
-            # negative 检测：登录表单消失 = 可能已登录
+            # negative 检测：登录表单仍存在 → 继续等待
             if await self._check_login_required(page):
+                _no_login_since = 0.0
                 return False
-            # 登录表单未找到。若仍在 login_url 的同一 netloc+path（如扫码等待确认），
-            # 不做跳转，继续轮询。
-            cur_parsed = urlparse(cur_url)
-            if (
-                cur_parsed.netloc == login_parsed.netloc
-                and cur_parsed.path == login_parsed.path
-            ):
+            # 登录表单已消失，需要防抖：等待 5 秒稳定期（扫码中间态可能短暂消失）
+            now = time.monotonic()
+            if _no_login_since == 0.0:
+                _no_login_since = now
+                self.logger.debug("登录表单消失，进入防抖期...")
                 return False
-            # 已离开登录页 → 导航到发布页二次确认
+            if now - _no_login_since < 5.0:
+                return False
+            # 防抖通过，导航到发布页二次确认
             try:
                 await page.goto(self.publish_url, timeout=15000)
                 await page.wait_for_timeout(3000)
@@ -170,6 +180,8 @@ class BaseUploader(ABC):
                     return True
             except Exception:
                 pass
+            # 发布页仍要求登录，重置状态继续等待
+            _no_login_since = 0.0
             return False
 
         return await self._wait_for_condition(
@@ -203,8 +215,9 @@ class BaseUploader(ABC):
             with self.logger.step("upload_video_flow", title=title) as step:
                 cookie_ok = await self.verify_cookie_flow(auto_login=auto_login)
                 if cookie_ok:
-                    # cookie 有效，使用 headless 浏览器上传
-                    async with await StealthBrowser.create(headless=True) as browser:
+                    # cookie 有效，使用浏览器上传
+                    headless = self._headless_upload
+                    async with await StealthBrowser.create(headless=headless) as browser:
                         await browser.load_cookies_from_file(self.cookie_file_path)
                         async with await browser.new_page() as page:
                             await page.goto(self.publish_url)

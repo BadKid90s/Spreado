@@ -145,9 +145,9 @@ async def _dry_run_publish(uploader, page) -> bool:
     const w = document.querySelector('wujie-app');
     const s = w && w.shadowRoot;
     if (!s) return false;
-    const btns = s.querySelectorAll('div.form-btns button');
+    const btns = s.querySelectorAll('button.weui-desktop-btn_primary');
     for (const b of btns) {
-        if (b.innerText.includes('发表')) return true;
+        if (b.innerText.includes('发表') && !b.className.includes('disabled') && !b.className.includes('weui-desktop-btn_disabled')) return true;
     }
     return false;
 }

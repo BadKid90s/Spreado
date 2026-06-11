@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
@@ -48,6 +49,10 @@ class XiaoHongShuUploader(BasePublisher):
     def _authed_selectors(self) -> List[str]:
         # 上传页才会渲染的元素：视频上传 input + 顶部的"上传视频"按钮
         return ["input.upload-input", 'button:has-text("上传视频")']
+
+    @property
+    def _headless_upload(self) -> bool:
+        return False  # 调试：有头模式观察页面行为
 
     # ---------------------------------------------------------------- 主流程
 
@@ -266,10 +271,25 @@ class XiaoHongShuUploader(BasePublisher):
                 '.d-modal .cover-container input[type="file"][accept*="image"]',
                 '.d-modal input[type="file"][accept*="image"]',
                 'input.upload-input[type="file"][accept*="image"]',
+                'input[type="file"][accept*="image"]',
+                'input[type="file"]',
             ]
             if not await self._upload_file_to_first(
                 page, upload_input_selectors, thumbnail_path, timeout=10000
             ):
+                # Debug: 列出页面上所有 file input
+                all_inputs = await page.locator('input[type="file"]').all()
+                self.logger.warning(
+                    "页面 file input 列表",
+                    count=len(all_inputs),
+                    attrs=[
+                        await inp.evaluate(
+                            "el => ({accept: el.accept, class: el.className, id: el.id, "
+                            "hidden: el.hidden, parent: el.parentElement?.className})"
+                        )
+                        for inp in all_inputs[:10]
+                    ],
+                )
                 self.logger.error("未找到封面图片上传 input")
                 return False
 
@@ -356,18 +376,122 @@ class XiaoHongShuUploader(BasePublisher):
 
     async def _publish_video(self, page: Page) -> bool:
         try:
-            button = page.get_by_role("button", name=re.compile("发布|定时发布")).first
-            if await button.count() == 0:
-                self.logger.error("未找到发布按钮")
+            import asyncio
+
+            # 检测发布成功的辅助函数
+            async def _check_publish_success() -> bool:
+                cur = page.url
+                if re.search(r"/success|published=true|/content/|/manage", cur):
+                    return True
+                for t in ["发布成功", "笔记已发布", "已发布", "审核中"]:
+                    if await page.locator(f'text="{t}"').count() > 0:
+                        return True
                 return False
-            await button.scroll_into_view_if_needed()
-            await button.wait_for(state="visible", timeout=10000)
-            return await self._click_and_wait_for_url(
-                page,
-                button,
-                re.compile(r"/success|published=true"),
-                timeout=30000,
-            )
+
+            # 1) 尝试键盘快捷键 Ctrl+Enter
+            self.logger.info("尝试 Ctrl+Enter 发布...")
+            await page.keyboard.press("Control+Enter")
+            await page.wait_for_timeout(3000)
+            if await _check_publish_success():
+                self.logger.info("发布成功(快捷键)")
+                return True
+
+            # 2) 检查确认弹窗
+            for t in ["确认发布", "确认", "发布"]:
+                btn = page.locator(f'button:has-text("{t}")').last
+                if await btn.count() > 0 and await btn.is_visible():
+                    self.logger.info("发现确认弹窗按钮", text=t)
+                    await btn.click(force=True)
+                    await page.wait_for_timeout(3000)
+                    if await _check_publish_success():
+                        self.logger.info("发布成功(确认弹窗)")
+                        return True
+                    break
+
+            # 3) 尝试多种选择器找到发布按钮
+            self.logger.info("尝试元素点击...")
+            candidates = [
+                'div.publish-page-publish-btn button:has-text("发布")',
+                'button.ce-btn.bg-red:has-text("发布")',
+                '[class*="publish-btn"]:visible',
+                'button:has-text("发布"):not(:has-text("笔记"))',
+            ]
+            for sel in candidates:
+                try:
+                    loc = page.locator(sel).first
+                    if await loc.count() > 0 and await loc.is_visible():
+                        await loc.scroll_into_view_if_needed()
+                        await page.wait_for_timeout(300)
+                        await loc.click(timeout=5000)
+                        self.logger.info("已点击发布按钮", selector=sel)
+                        await page.wait_for_timeout(2000)
+                        if await _check_publish_success():
+                            self.logger.info("发布成功(元素点击)")
+                            return True
+                        break
+                except Exception:
+                    continue
+
+            # 4) 最后手段：滚动到底部 + JS 查找 + 坐标点击
+            self.logger.info("尝试查找发布按钮...")
+            try:
+                # 先滚动到底部触发懒加载
+                await page.evaluate("""() => {
+                    const containers = document.querySelectorAll(
+                        '.publish-page, .publish-page-container, .publish-vue-container, .microapp-container, .outarea'
+                    );
+                    for (const c of containers) { c.scrollTop = c.scrollHeight; }
+                    window.scrollTo(0, document.body.scrollHeight);
+                }""")
+                await page.wait_for_timeout(1000)
+
+                # JS 查找
+                clicked = await page.evaluate("""() => {
+                    const all = document.querySelectorAll('div, button, span, a');
+                    for (const el of all) {
+                        const text = el.innerText?.trim();
+                        if (text === '发布' && el.offsetParent !== null) {
+                            el.click();
+                            return {method: 'exact', tag: el.tagName};
+                        }
+                    }
+                    return null;
+                }""")
+                if clicked:
+                    self.logger.info("已通过 JS 点击发布按钮", info=clicked)
+                    await page.wait_for_timeout(3000)
+                    if await _check_publish_success():
+                        self.logger.info("发布成功(JS点击)")
+                        return True
+
+                # 坐标点击：发布按钮通常在页面底部居中偏右
+                self.logger.info("尝试坐标点击发布按钮...")
+                viewport = page.viewport_size
+                if viewport:
+                    # 按钮大约在底部 93% 高度，水平居中偏右 55% 位置
+                    x = int(viewport["width"] * 0.55)
+                    y = int(viewport["height"] * 0.93)
+                    await page.mouse.click(x, y)
+                    self.logger.info("已坐标点击", x=x, y=y)
+                    await page.wait_for_timeout(3000)
+                    if await _check_publish_success():
+                        self.logger.info("发布成功(坐标点击)")
+                        return True
+            except Exception as e:
+                self.logger.warning("查找发布按钮失败", reason=str(e)[:100])
+
+            # 5) 等待结果（兜底）
+            success = False
+            start = time.monotonic()
+            while time.monotonic() - start < 20:
+                if await _check_publish_success():
+                    success = True
+                    break
+                await asyncio.sleep(1)
+
+            if not success:
+                self.logger.warning("发布结果检测超时", url=page.url)
+            return success
         except Exception as e:
             self.logger.error("发布异常", reason=str(e)[:200])
             return False
