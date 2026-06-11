@@ -503,18 +503,49 @@ class XiaoHongShuUploader(BasePublisher):
 
     async def _publish_video(self, page: Page) -> bool:
         try:
-            button = page.get_by_role("button", name=re.compile("发布|定时发布")).first
-            if await button.count() == 0:
-                self.logger.error("未找到发布按钮")
+            import asyncio
+
+            async def _check_success() -> bool:
+                cur = page.url
+                if re.search(r"/success|published=true|/content/|/manage", cur):
+                    return True
+                for t in ["发布成功", "笔记已发布", "已发布", "审核中"]:
+                    if await page.locator(f'text="{t}"').count() > 0:
+                        return True
                 return False
-            await button.scroll_into_view_if_needed()
-            await button.wait_for(state="visible", timeout=10000)
-            return await self._click_and_wait_for_url(
-                page,
-                button,
-                re.compile(r"/success|published=true"),
-                timeout=30000,
-            )
+
+            # 1) Ctrl+Enter 快捷键
+            await page.keyboard.press("Control+Enter")
+            await page.wait_for_timeout(3000)
+            if await _check_success():
+                self.logger.info("发布成功(快捷键)")
+                return True
+
+            # 2) 查找发布按钮
+            for sel in [
+                'button:has-text("发布")',
+                '[class*="publish-btn"]',
+                'div[class*="btn"]:has-text("发布")',
+            ]:
+                btn = page.locator(sel).first
+                if await btn.count() > 0 and await btn.is_visible():
+                    await btn.scroll_into_view_if_needed()
+                    await btn.click(force=True)
+                    self.logger.info("已点击发布按钮", selector=sel)
+                    await page.wait_for_timeout(3000)
+                    if await _check_success():
+                        self.logger.info("发布成功(按钮)")
+                        return True
+                    break
+
+            # 3) 等待结果兜底
+            for _ in range(10):
+                if await _check_success():
+                    return True
+                await asyncio.sleep(1)
+
+            self.logger.warning("发布结果检测超时", url=page.url)
+            return False
         except Exception as e:
             self.logger.error("发布异常", reason=str(e)[:200])
             return False
