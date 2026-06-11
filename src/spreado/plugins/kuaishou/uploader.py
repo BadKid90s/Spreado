@@ -43,17 +43,19 @@ class KuaiShouUploader(BasePublisher):
         return ["#work-description-edit", 'text="发布作品"']
 
     async def _dismiss_overlays(self, page: Page) -> None:
-        """移除 react-joyride 新手引导等遮罩层。"""
+        """关闭 react-joyride 新手引导等遮罩层。"""
         try:
+            # 优先点击 Skip 按钮（正确关闭引导）
+            skip_btn = page.locator('[aria-label="Skip"], [data-action="skip"]').first
+            if await skip_btn.count() > 0 and await skip_btn.is_visible():
+                await skip_btn.click(force=True)
+                await page.wait_for_timeout(300)
+                return
+            # 备选：直接移除 DOM
             await page.evaluate("""
 () => {
-    const joyride = document.getElementById('react-joyride-portal');
-    if (joyride) joyride.remove();
-    // 也尝试关闭其他可能的遮罩/弹窗
-    const overlays = document.querySelectorAll(
-        '.react-joyride__overlay, .react-joyride__spotlight, [class*="joyride"]'
-    );
-    overlays.forEach(el => el.remove());
+    const portal = document.getElementById('react-joyride-portal');
+    if (portal) portal.remove();
 }
 """)
         except Exception:
@@ -214,10 +216,25 @@ class KuaiShouUploader(BasePublisher):
             await self._dismiss_overlays(page)
             # 新版快手封面为内联编辑器，直接注入 image file input
             cover_input = page.locator('input[type="file"][accept*="image"]').first
+            try:
+                await cover_input.wait_for(state="attached", timeout=10000)
+            except Error:
+                pass
             if await cover_input.count() > 0:
                 await cover_input.set_input_files(thumbnail_path)
                 await page.wait_for_timeout(2000)
                 self.logger.info("封面图片已注入")
+                return True
+
+            # 备选：通过基类方法查找
+            if await self._upload_file_to_first(
+                page,
+                ['input[type="file"][accept*="image"]', 'input[type="file"]'],
+                thumbnail_path,
+                timeout=10000,
+            ):
+                await page.wait_for_timeout(2000)
+                self.logger.info("封面图片已注入(备选)")
                 return True
 
             self.logger.error("未找到封面图片上传 input")
