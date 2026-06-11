@@ -42,6 +42,23 @@ class KuaiShouUploader(BasePublisher):
     def _authed_selectors(self) -> List[str]:
         return ["#work-description-edit", 'text="发布作品"']
 
+    async def _dismiss_overlays(self, page: Page) -> None:
+        """移除 react-joyride 新手引导等遮罩层。"""
+        try:
+            await page.evaluate("""
+() => {
+    const joyride = document.getElementById('react-joyride-portal');
+    if (joyride) joyride.remove();
+    // 也尝试关闭其他可能的遮罩/弹窗
+    const overlays = document.querySelectorAll(
+        '.react-joyride__overlay, .react-joyride__spotlight, [class*="joyride"]'
+    );
+    overlays.forEach(el => el.remove());
+}
+""")
+        except Exception:
+            pass
+
     async def _upload_video(
         self,
         page: Page,
@@ -60,6 +77,8 @@ class KuaiShouUploader(BasePublisher):
                         await page.wait_for_url(self.publish_url, timeout=5000)
                     except Error:
                         pass
+                    # 移除 joyride 引导遮罩，避免阻挡后续点击
+                    await self._dismiss_overlays(page)
 
                 with self.logger.step("upload_video_file", file=str(file_path)):
                     if not await self._upload_video_file(page, file_path):
@@ -189,17 +208,17 @@ class KuaiShouUploader(BasePublisher):
 
         try:
             # 1) 点击"封面设置"打开弹窗
-            cover_btn = page.get_by_text("封面设置").last
+            cover_btn = page.locator('div:has-text("封面设置")').last
             await cover_btn.wait_for(state="visible", timeout=10000)
-            await cover_btn.click()
+            await cover_btn.click(force=True)
 
             # 2) 等待弹窗，点击"上传封面"
             await page.wait_for_selector(
                 "div.ant-modal-body", timeout=10000, state="visible"
             )
-            upload_btn = page.get_by_text("上传封面")
+            upload_btn = page.get_by_text("上传封面").first
             await upload_btn.wait_for(state="visible", timeout=5000)
-            await upload_btn.click()
+            await upload_btn.click(force=True)
 
             # 3) 注入封面图片
             if not await self._upload_file_to_first(
@@ -216,7 +235,7 @@ class KuaiShouUploader(BasePublisher):
             # 4) 确认
             confirm_btn = page.get_by_role("button", name="确认")
             await confirm_btn.wait_for(state="visible", timeout=5000)
-            await confirm_btn.click()
+            await confirm_btn.click(force=True)
 
             await page.wait_for_timeout(1000)
             self.logger.info("封面设置完成")
@@ -251,22 +270,23 @@ class KuaiShouUploader(BasePublisher):
             return False
 
     async def _publish_video(self, page: Page) -> bool:
-        success_pattern = re.compile(r"/article/manage/video\?status=2&from=publish")
+        success_pattern = re.compile(r"/article/manage/video\?.*from=publish")
         try:
-            # 点击"发布"按钮
-            publish_btn = page.get_by_text("发布", exact=True)
+            # 点"发布"（是 div 不是 button）
+            publish_btn = page.locator('div[class*="_button-primary"]:has-text("发布")').first
+            if await publish_btn.count() == 0:
+                publish_btn = page.get_by_text("发布", exact=True).first
             if await publish_btn.count() > 0:
-                await publish_btn.click()
-                await page.wait_for_timeout(500)
+                await publish_btn.click(force=True)
+                await page.wait_for_timeout(800)
 
             # 处理"确认发布"弹窗
-            confirm_btn = page.get_by_text("确认发布")
-            if await confirm_btn.count() > 0:
+            confirm_btn = page.locator('div:has-text("确认发布")').first
+            if await confirm_btn.count() > 0 and await confirm_btn.is_visible():
                 return await self._click_and_wait_for_url(
                     page, confirm_btn, success_pattern, timeout=15000
                 )
 
-            # 兜底：检查是否已跳转
             if success_pattern.search(page.url):
                 return True
 
