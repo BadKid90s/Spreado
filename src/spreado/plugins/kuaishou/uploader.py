@@ -6,6 +6,7 @@ import re
 from playwright.async_api import Page, Error
 
 from spreado.core.base_publisher import BasePublisher
+from spreado.core.browser import StealthBrowser
 
 
 class KuaiShouUploader(BasePublisher):
@@ -30,6 +31,10 @@ class KuaiShouUploader(BasePublisher):
         return "https://cp.kuaishou.com/article/publish/video"
 
     @property
+    def supported_content_types(self) -> List[str]:
+        return ["video", "image_text"]
+
+    @property
     def _login_selectors(self) -> List[str]:
         return [
             'text="立即登录"',
@@ -41,6 +46,219 @@ class KuaiShouUploader(BasePublisher):
     @property
     def _authed_selectors(self) -> List[str]:
         return ["#work-description-edit", 'text="发布作品"']
+
+    # ---------------------------------------------------------------- 图文发布
+
+    async def _switch_to_image_text_tab(self, page: Page) -> bool:
+        """点击"上传图文"标签切换到图文发布模式。"""
+        try:
+            # 等待 tabs 渲染
+            try:
+                await page.wait_for_selector(
+                    ".ant-tabs-tab-btn", state="visible", timeout=10000
+                )
+            except Error:
+                pass
+
+            # 方式1：Playwright locator
+            tab = page.locator('.ant-tabs-tab-btn:has-text("图文")').first
+            if await tab.count() > 0:
+                await tab.click(force=True)
+                await page.wait_for_timeout(500)
+                return True
+
+            # 方式2：JS evaluate
+            clicked = await page.evaluate("""
+() => {
+    const tabs = document.querySelectorAll('.ant-tabs-tab-btn');
+    for (const t of tabs) {
+        if (t.innerText.includes('图文')) { t.click(); return true; }
+    }
+    return false;
+}
+""")
+            if clicked:
+                await page.wait_for_timeout(500)
+            return clicked
+        except Exception:
+            return False
+
+    async def _upload_images(self, page: Page, image_paths: List[str | Path]) -> bool:
+        """上传多张图片到图文编辑器（通过"上传图片"按钮触发 file chooser）。"""
+        try:
+            upload_btn = page.locator('button:has-text("上传图片")')
+            if await upload_btn.count() == 0:
+                upload_btn = page.locator('[class*="upload-btn"]:has-text("图片")')
+
+            if await upload_btn.count() > 0:
+                await upload_btn.wait_for(state="visible", timeout=10000)
+                async with page.expect_file_chooser(timeout=5000) as fc_info:
+                    await upload_btn.click(force=True)
+                file_chooser = await fc_info.value
+                files = [str(Path(p).resolve()) for p in image_paths]
+                await file_chooser.set_files(files)
+                self.logger.info("图片已上传", count=len(files))
+                return True
+
+            # 备选：直接注入
+            img_input = page.locator('input[type="file"][accept*="image"]').first
+            if await img_input.count() > 0:
+                files = [str(Path(p).resolve()) for p in image_paths]
+                await img_input.set_input_files(files)
+                self.logger.info("图片文件已注入", count=len(files))
+                return True
+
+            self.logger.error("未找到图片上传入口")
+            return False
+        except Exception as e:
+            self.logger.error("图片上传失败", reason=str(e)[:200])
+            return False
+
+    async def _wait_for_image_upload_complete(self, page: Page) -> bool:
+        """等待图片上传完成：编辑器出现。"""
+        async def check() -> bool:
+            editor = page.locator("#work-description-edit")
+            if await editor.count() > 0 and await editor.first.is_visible():
+                return True
+            return False
+
+        return await self._wait_for_condition(
+            check, timeout=120.0, interval=2.0, desc="image_upload_complete"
+        )
+
+    async def _upload_image_text(
+        self,
+        page: Page,
+        image_paths: List[str | Path],
+        title: str = "",
+        content: str = "",
+        tags: List[str] = None,
+        publish_date: Optional[datetime] = None,
+        thumbnail_path: Optional[str | Path] = None,
+    ) -> bool:
+        """图文发布主流程。"""
+        try:
+            with self.logger.step(
+                "upload_image_text", title=title, images=str(len(image_paths))
+            ):
+                with self.logger.step("goto_upload_page"):
+                    await page.goto(self.publish_url)
+                    try:
+                        await page.wait_for_url(self.publish_url, timeout=5000)
+                    except Error:
+                        pass
+
+                with self.logger.step("switch_to_image_text_tab"):
+                    if not await self._switch_to_image_text_tab(page):
+                        raise RuntimeError("无法切换到图文发布标签")
+
+                with self.logger.step("upload_images", count=len(image_paths)):
+                    if not await self._upload_images(page, image_paths):
+                        return False
+
+                with self.logger.step("wait_for_upload_complete"):
+                    if not await self._wait_for_image_upload_complete(page):
+                        return False
+
+                with self.logger.step("fill_video_info", title=title):
+                    if not await self._fill_video_info(page, title, content, tags):
+                        return False
+
+                with self.logger.step(
+                    "set_thumbnail", path=str(thumbnail_path or "")
+                ):
+                    if not await self._set_thumbnail(page, thumbnail_path):
+                        return False
+
+                if publish_date:
+                    with self.logger.step(
+                        "set_schedule_time", at=publish_date.isoformat()
+                    ):
+                        if not await self._set_schedule_time(page, publish_date):
+                            return False
+
+                with self.logger.step("publish_video"):
+                    if not await self._publish_video(page):
+                        return False
+            return True
+        except Exception as e:
+            self.logger.error("upload_image_text 异常", reason=str(e)[:200])
+            return False
+
+    async def publish_image_text(self, task) -> bool:
+        """基于 Task 模型发布图文。"""
+        if not task.media_files:
+            self.logger.error("任务缺少图片文件")
+            return False
+
+        return await self._login_and_upload_image_text(
+            image_paths=task.media_files,
+            title=task.title,
+            content=task.content,
+            tags=task.tags,
+            publish_date=task.publish_date,
+            thumbnail_path=task.thumbnail_path,
+        )
+
+    async def _login_and_upload_image_text(
+        self,
+        image_paths: List[str | Path],
+        title: str = "",
+        content: str = "",
+        tags: List[str] = None,
+        publish_date: Optional[datetime] = None,
+        thumbnail_path: Optional[str | Path] = None,
+    ) -> bool:
+        """登录 + 图文上传（同一浏览器，解决 fingerprint 兼容）。"""
+        cookie_ok = await self.verify_cookie_flow(auto_login=False)
+        if cookie_ok:
+            async with await StealthBrowser.create(
+                headless=True
+            ) as browser:
+                await browser.load_cookies_from_file(self.cookie_file_path)
+                async with await browser.new_page() as page:
+                    return await self._upload_image_text(
+                        page=page,
+                        image_paths=image_paths,
+                        title=title,
+                        content=content,
+                        tags=tags,
+                        publish_date=publish_date,
+                        thumbnail_path=thumbnail_path,
+                    )
+
+        # cookie 无效，登录并上传
+        self.logger.info("cookie 无效，启动登录流程")
+        try:
+            async with await StealthBrowser.create(
+                headless=False, channel=self._browser_channel
+            ) as browser:
+                page = await browser.new_page()
+                await page.goto(self.login_url)
+                self.logger.info("等待用户在浏览器内完成登录…")
+                if not await self._wait_for_login(page, timeout=120.0):
+                    raise RuntimeError("登录超时")
+                self.cookie_file_path.parent.mkdir(parents=True, exist_ok=True)
+                await page.context.storage_state(path=self.cookie_file_path)
+                self.logger.info("cookie 已保存")
+                await page.goto(self.publish_url)
+                await page.wait_for_timeout(3000)
+                if await self._check_login_required(page):
+                    raise RuntimeError("登录后发布页仍要求登录")
+                return await self._upload_image_text(
+                    page=page,
+                    image_paths=image_paths,
+                    title=title,
+                    content=content,
+                    tags=tags,
+                    publish_date=publish_date,
+                    thumbnail_path=thumbnail_path,
+                )
+        except Exception as e:
+            self.logger.error("登录并上传图文失败", reason=str(e)[:200])
+            return False
+
+    # ---------------------------------------------------------------- 视频发布
 
     async def _upload_video(
         self,
@@ -412,40 +630,39 @@ class KuaiShouUploader(BasePublisher):
             return False
 
     async def _publish_video(self, page: Page) -> bool:
-        """
-        发布视频
+        success_pattern = re.compile(r"/article/manage/video\?.*from=publish")
+        try:
+            # "发布"是自定义 div，用 JS click 最可靠
+            clicked = await page.evaluate("""
+() => {
+    const btns = document.querySelectorAll('[class*="_button-primary"]');
+    for (const b of btns) {
+        if (b.innerText && b.innerText.includes('发布')) { b.click(); return true; }
+    }
+    return false;
+}
+""")
+            if not clicked:
+                self.logger.error("未找到发布按钮")
+                return False
+            await page.wait_for_timeout(1500)
 
-        Args:
-            page: 页面实例
-
-        Returns:
-            是否成功发布视频
-        """
-        success_pattern = re.compile(r"/article/manage/video\?status=2&from=publish")
-        max_retries = 10
-        retry_count = 0
-
-        while retry_count < max_retries:
+            # 处理"确认发布"弹窗
+            confirm_btn = page.locator('button:has-text("确认发布"), div:has-text("确认发布")').first
             try:
-                publish_button = page.get_by_text("发布", exact=True)
-                if await publish_button.count() > 0:
-                    await publish_button.click()
-                    self.logger.info("已点击发布按钮")
+                await confirm_btn.wait_for(state="visible", timeout=8000)
+            except Error:
+                pass
+            if await confirm_btn.count() > 0 and await confirm_btn.is_visible():
+                return await self._click_and_wait_for_url(
+                    page, confirm_btn, success_pattern, timeout=15000
+                )
 
-                await page.wait_for_timeout(500)
-                confirm_button = page.get_by_text("确认发布")
-                if await confirm_button.count() > 0:
-                    if await self._click_and_wait_for_url(
-                        page, confirm_button, success_pattern, timeout=5000
-                    ):
-                        self.logger.info("视频发布成功，已跳转到管理页面")
-                        return True
+            if success_pattern.search(page.url):
+                return True
 
-            except Error as e:
-                self.logger.warning(f"发布视频时出错: {e}")
-
-            await page.wait_for_timeout(1000)
-            retry_count += 1
-
-        self.logger.error("超过最大重试次数，视频发布失败")
-        return False
+            self.logger.error("未找到确认发布按钮")
+            return False
+        except Exception as e:
+            self.logger.error("发布失败", reason=str(e)[:200])
+            return False
