@@ -217,36 +217,30 @@ class KuaiShouUploader(BasePublisher):
 
         try:
             await self._dismiss_overlays(page)
-            # 新版快手封面为内联编辑器，直接注入 image file input
-            cover_input = page.locator('input[type="file"][accept*="image"]').first
+            # 新版快手封面为内联编辑器，点击封面区域触发 file chooser
+            cover_trigger = page.locator('[class*="_default-cover"], [class*="_cover-full-editor"]').first
+            await cover_trigger.wait_for(state="visible", timeout=10000)
+            async with page.expect_file_chooser(timeout=5000) as fc_info:
+                await cover_trigger.click(force=True)
+            file_chooser = await fc_info.value
+            await file_chooser.set_files(thumbnail_path)
+            await page.wait_for_timeout(2000)
+            self.logger.info("封面图片已设置")
+            return True
+        except Exception as e:
+            # file chooser 未触发，降级尝试直接注入
+            self.logger.warning("file chooser 未触发，尝试直接注入", reason=str(e)[:100])
             try:
-                await cover_input.wait_for(state="attached", timeout=10000)
-            except Error:
-                pass
-            if await cover_input.count() > 0:
+                cover_input = page.locator('input[type="file"][accept*="image"]').first
+                await cover_input.wait_for(state="attached", timeout=5000)
                 await cover_input.set_input_files(thumbnail_path)
-                # 触发 change 事件确保 React 组件感知变更
                 await cover_input.dispatch_event("change")
                 await page.wait_for_timeout(2000)
-                self.logger.info("封面图片已注入")
+                self.logger.info("封面图片已注入(降级)")
                 return True
-
-            # 备选：通过基类方法查找
-            if await self._upload_file_to_first(
-                page,
-                ['input[type="file"][accept*="image"]', 'input[type="file"]'],
-                thumbnail_path,
-                timeout=10000,
-            ):
-                await page.wait_for_timeout(2000)
-                self.logger.info("封面图片已注入(备选)")
-                return True
-
-            self.logger.error("未找到封面图片上传 input")
-            return False
-        except Exception as e:
-            self.logger.error("封面设置失败", reason=str(e)[:200])
-            return False
+            except Exception:
+                self.logger.error("封面设置失败", reason=str(e)[:200])
+                return False
 
     async def _set_schedule_time(self, page: Page, publish_date: datetime) -> bool:
         try:
