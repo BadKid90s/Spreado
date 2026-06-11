@@ -211,8 +211,11 @@ class KuaiShouUploader(BasePublisher):
             return True
 
         try:
+            await self._dismiss_overlays(page)
             # 1) 点击"封面设置"打开弹窗
-            cover_btn = page.locator('div:has-text("封面设置")').last
+            cover_btn = page.locator('div[class*="cover-editor-label"], div[class*="default-cover"], div[class*="cover-full-editor"]').first
+            if await cover_btn.count() == 0:
+                cover_btn = page.get_by_text("封面设置").first
             await cover_btn.wait_for(state="visible", timeout=10000)
             await cover_btn.click(force=True)
 
