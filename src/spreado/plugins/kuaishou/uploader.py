@@ -209,29 +209,25 @@ class KuaiShouUploader(BasePublisher):
         self, page: Page, thumbnail_path: Optional[str | Path],
     ) -> bool:
         if not thumbnail_path:
-            self.logger.info("未指定封面，跳过")
             return True
         if not Path(thumbnail_path).exists():
-            self.logger.warning("封面文件不存在，跳过", path=str(thumbnail_path))
+            self.logger.warning("封面文件不存在", path=str(thumbnail_path))
             return True
 
         try:
             await self._dismiss_overlays(page)
-            # 点击封面区域使其获得焦点
-            cover_area = page.locator('[class*="_default-cover"], [class*="_cover-full-editor"]').first
-            try:
-                await cover_area.click(force=True, timeout=3000)
-            except Error:
-                pass
-
-            # 直接向隐藏的 image file input 注入封面图片
-            cover_input = page.locator('input[type="file"][accept*="image"]').first
-            await cover_input.wait_for(state="attached", timeout=10000)
-            await cover_input.set_input_files(thumbnail_path)
-            await cover_input.dispatch_event("change")
-            await page.wait_for_timeout(2000)
-            self.logger.info("封面图片已注入")
-            return True
+            # 向隐藏的 image file input 注入封面图片
+            if await self._upload_file_to_first(
+                page,
+                ['input[type="file"][accept*="image"]', 'input[type="file"]'],
+                thumbnail_path,
+                timeout=10000,
+            ):
+                await page.wait_for_timeout(2000)
+                self.logger.info("封面图片已注入")
+                return True
+            self.logger.error("未找到封面图片上传 input")
+            return False
         except Exception as e:
             self.logger.error("封面设置失败", reason=str(e)[:200])
             return False
