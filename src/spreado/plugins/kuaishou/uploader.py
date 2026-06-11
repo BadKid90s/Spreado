@@ -264,18 +264,26 @@ class KuaiShouUploader(BasePublisher):
     async def _publish_video(self, page: Page) -> bool:
         success_pattern = re.compile(r"/article/manage/video\?.*from=publish")
         try:
-            # 点"发布"（是 div 不是 button）
-            publish_btn = page.locator('div[class*="_button-primary"]:has-text("发布")').first
-            if await publish_btn.count() == 0:
-                publish_btn = page.get_by_text("发布", exact=True).first
-            if await publish_btn.count() > 0:
-                await publish_btn.click(force=True)
-                await page.wait_for_timeout(1500)
+            await self._dismiss_overlays(page)
+            # "发布"是自定义 div，用 JS click 最可靠
+            clicked = await page.evaluate("""
+() => {
+    const btns = document.querySelectorAll('[class*="_button-primary"]');
+    for (const b of btns) {
+        if (b.innerText?.includes('发布')) { b.click(); return true; }
+    }
+    return false;
+}
+""")
+            if not clicked:
+                self.logger.error("未找到发布按钮")
+                return False
+            await page.wait_for_timeout(1500)
 
-            # 处理"确认发布"弹窗（可能是 div 或 button）
+            # 处理"确认发布"弹窗
             confirm_btn = page.locator('button:has-text("确认发布"), div:has-text("确认发布")').first
             try:
-                await confirm_btn.wait_for(state="visible", timeout=5000)
+                await confirm_btn.wait_for(state="visible", timeout=8000)
             except Error:
                 pass
             if await confirm_btn.count() > 0 and await confirm_btn.is_visible():
@@ -288,6 +296,6 @@ class KuaiShouUploader(BasePublisher):
 
             self.logger.error("未找到确认发布按钮")
             return False
-        except Error as e:
+        except Exception as e:
             self.logger.error("发布失败", reason=str(e)[:200])
             return False
