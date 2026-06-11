@@ -145,7 +145,6 @@ class BaseUploader(ABC):
         """
         await page.wait_for_timeout(3000)
 
-        login_parsed = urlparse(self.login_url)
         _no_login_since: float = 0.0  # 闭包变量：登录表单首次消失的时间戳
 
         async def check() -> bool:
