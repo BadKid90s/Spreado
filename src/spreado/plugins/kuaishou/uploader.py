@@ -212,41 +212,16 @@ class KuaiShouUploader(BasePublisher):
 
         try:
             await self._dismiss_overlays(page)
-            # 1) 点击"封面设置"打开弹窗
-            cover_btn = page.locator('div[class*="cover-editor-label"], div[class*="default-cover"], div[class*="cover-full-editor"]').first
-            if await cover_btn.count() == 0:
-                cover_btn = page.get_by_text("封面设置").first
-            await cover_btn.wait_for(state="visible", timeout=10000)
-            await cover_btn.click(force=True)
+            # 新版快手封面为内联编辑器，直接注入 image file input
+            cover_input = page.locator('input[type="file"][accept*="image"]').first
+            if await cover_input.count() > 0:
+                await cover_input.set_input_files(thumbnail_path)
+                await page.wait_for_timeout(2000)
+                self.logger.info("封面图片已注入")
+                return True
 
-            # 2) 等待弹窗，点击"上传封面"
-            await page.wait_for_selector(
-                "div.ant-modal-body", timeout=10000, state="visible"
-            )
-            upload_btn = page.get_by_text("上传封面").first
-            await upload_btn.wait_for(state="visible", timeout=5000)
-            await upload_btn.click(force=True)
-
-            # 3) 注入封面图片
-            if not await self._upload_file_to_first(
-                page,
-                ["div[class*='upload'] input[type='file']", "input[type='file'][accept*='image']"],
-                thumbnail_path,
-                timeout=10000,
-            ):
-                self.logger.error("未找到封面图片上传 input")
-                return False
-
-            await page.wait_for_timeout(1500)
-
-            # 4) 确认
-            confirm_btn = page.get_by_role("button", name="确认")
-            await confirm_btn.wait_for(state="visible", timeout=5000)
-            await confirm_btn.click(force=True)
-
-            await page.wait_for_timeout(1000)
-            self.logger.info("封面设置完成")
-            return True
+            self.logger.error("未找到封面图片上传 input")
+            return False
         except Exception as e:
             self.logger.error("封面设置失败", reason=str(e)[:200])
             return False
