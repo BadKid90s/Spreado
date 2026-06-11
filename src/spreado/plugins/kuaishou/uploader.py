@@ -217,30 +217,24 @@ class KuaiShouUploader(BasePublisher):
 
         try:
             await self._dismiss_overlays(page)
-            # 新版快手封面为内联编辑器，点击封面区域触发 file chooser
-            cover_trigger = page.locator('[class*="_default-cover"], [class*="_cover-full-editor"]').first
-            await cover_trigger.wait_for(state="visible", timeout=10000)
-            async with page.expect_file_chooser(timeout=5000) as fc_info:
-                await cover_trigger.click(force=True)
-            file_chooser = await fc_info.value
-            await file_chooser.set_files(thumbnail_path)
+            # 点击封面区域使其获得焦点
+            cover_area = page.locator('[class*="_default-cover"], [class*="_cover-full-editor"]').first
+            try:
+                await cover_area.click(force=True, timeout=3000)
+            except Error:
+                pass
+
+            # 直接向隐藏的 image file input 注入封面图片
+            cover_input = page.locator('input[type="file"][accept*="image"]').first
+            await cover_input.wait_for(state="attached", timeout=10000)
+            await cover_input.set_input_files(thumbnail_path)
+            await cover_input.dispatch_event("change")
             await page.wait_for_timeout(2000)
-            self.logger.info("封面图片已设置")
+            self.logger.info("封面图片已注入")
             return True
         except Exception as e:
-            # file chooser 未触发，降级尝试直接注入
-            self.logger.warning("file chooser 未触发，尝试直接注入", reason=str(e)[:100])
-            try:
-                cover_input = page.locator('input[type="file"][accept*="image"]').first
-                await cover_input.wait_for(state="attached", timeout=5000)
-                await cover_input.set_input_files(thumbnail_path)
-                await cover_input.dispatch_event("change")
-                await page.wait_for_timeout(2000)
-                self.logger.info("封面图片已注入(降级)")
-                return True
-            except Exception:
-                self.logger.error("封面设置失败", reason=str(e)[:200])
-                return False
+            self.logger.error("封面设置失败", reason=str(e)[:200])
+            return False
 
     async def _set_schedule_time(self, page: Page, publish_date: datetime) -> bool:
         try:
