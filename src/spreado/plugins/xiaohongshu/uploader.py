@@ -121,11 +121,17 @@ class XiaoHongShuUploader(BasePublisher):
             # 标题输入框出现 = 上传完成
             if (
                 await page.locator("input[placeholder*='填写标题']").count() > 0
-                and await page.locator("input[placeholder*='填写标题']").first.is_visible()
+                and await page.locator(
+                    "input[placeholder*='填写标题']"
+                ).first.is_visible()
             ):
                 return True
             # 预览区出现
-            for sel in ["div.upload-content div.preview-new", "div.preview-new", '[class*="preview"]']:
+            for sel in [
+                "div.upload-content div.preview-new",
+                "div.preview-new",
+                '[class*="preview"]',
+            ]:
                 loc = page.locator(sel).first
                 if await loc.count() > 0 and await loc.is_visible():
                     return True
@@ -134,7 +140,11 @@ class XiaoHongShuUploader(BasePublisher):
                 if await page.locator(f"text={txt}").count() > 0:
                     return True
             # 进度条存在 = 仍在传输中
-            for sel in [".el-progress-bar", '[class*="progress"]', '[class*="uploading"]']:
+            for sel in [
+                ".el-progress-bar",
+                '[class*="progress"]',
+                '[class*="uploading"]',
+            ]:
                 loc = page.locator(sel).first
                 if await loc.count() > 0 and await loc.is_visible():
                     return False
@@ -189,7 +199,9 @@ class XiaoHongShuUploader(BasePublisher):
                     await page.keyboard.press("Enter")
                     added += 1
                 except Exception as e:
-                    self.logger.warning("标签添加失败", tag=clean_tag, reason=str(e)[:100])
+                    self.logger.warning(
+                        "标签添加失败", tag=clean_tag, reason=str(e)[:100]
+                    )
                 await page.wait_for_timeout(200)
 
             self.logger.info("标题与标签已填充", added=added, total=len(tags or []))
@@ -285,12 +297,16 @@ class XiaoHongShuUploader(BasePublisher):
             # 1) 开启定时发布开关
             switch_container = page.locator(".post-time-switch-container")
             if await switch_container.count() == 0:
-                switch_container = page.locator(".custom-switch-wrapper:has-text('定时发布')")
+                switch_container = page.locator(
+                    ".custom-switch-wrapper:has-text('定时发布')"
+                )
 
             # 找到 .d-switch 组件（兼容新旧 UI）
             switch = switch_container.locator(".d-switch").first
             if await switch.count() == 0:
-                switch = page.locator(".custom-switch-wrapper:has-text('定时发布') .d-switch").first
+                switch = page.locator(
+                    ".custom-switch-wrapper:has-text('定时发布') .d-switch"
+                ).first
 
             if await switch.count() > 0:
                 await switch.scroll_into_view_if_needed()

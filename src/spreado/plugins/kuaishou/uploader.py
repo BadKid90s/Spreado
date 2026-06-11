@@ -170,7 +170,11 @@ class KuaiShouUploader(BasePublisher):
         )
 
     async def _fill_video_info(
-        self, page: Page, title: str = "", content: str = "", tags: List[str] = None,
+        self,
+        page: Page,
+        title: str = "",
+        content: str = "",
+        tags: List[str] = None,
     ) -> bool:
         try:
             # 再次移除可能重新出现的遮罩
@@ -206,7 +210,9 @@ class KuaiShouUploader(BasePublisher):
             return False
 
     async def _set_thumbnail(
-        self, page: Page, thumbnail_path: Optional[str | Path],
+        self,
+        page: Page,
+        thumbnail_path: Optional[str | Path],
     ) -> bool:
         if not thumbnail_path:
             return True
@@ -233,7 +239,10 @@ class KuaiShouUploader(BasePublisher):
             # 3) 上传封面图片
             if not await self._upload_file_to_first(
                 page,
-                ["div[class*='upload'] input[type='file']", "input[type='file'][accept*='image']"],
+                [
+                    "div[class*='upload'] input[type='file']",
+                    "input[type='file'][accept*='image']",
+                ],
                 thumbnail_path,
                 timeout=10000,
             ):
@@ -299,7 +308,9 @@ class KuaiShouUploader(BasePublisher):
             await page.wait_for_timeout(1500)
 
             # 处理"确认发布"弹窗
-            confirm_btn = page.locator('button:has-text("确认发布"), div:has-text("确认发布")').first
+            confirm_btn = page.locator(
+                'button:has-text("确认发布"), div:has-text("确认发布")'
+            ).first
             try:
                 await confirm_btn.wait_for(state="visible", timeout=8000)
             except Error:

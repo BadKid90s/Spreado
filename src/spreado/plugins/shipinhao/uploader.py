@@ -160,7 +160,9 @@ class ShiPinHaoUploader(BasePublisher):
 
     # ---------------------------------------------------------------- 主流程
 
-    async def _wait_for_publish_page_ready(self, page: Page, timeout: float = 20.0) -> bool:
+    async def _wait_for_publish_page_ready(
+        self, page: Page, timeout: float = 20.0
+    ) -> bool:
         """导航到发布页后等待 wujie shadow DOM 渲染完毕。"""
         try:
             await page.wait_for_url(self.publish_url, timeout=5000)

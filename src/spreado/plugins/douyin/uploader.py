@@ -120,7 +120,11 @@ class DouYinUploader(BasePublisher):
             if await title_input.count() > 0 and await title_input.is_visible():
                 return True
             # 预览区出现
-            for sel in ['div[class^="preview-button"]', 'div[class*="preview"]', 'div[class*="video-content"]']:
+            for sel in [
+                'div[class^="preview-button"]',
+                'div[class*="preview"]',
+                'div[class*="video-content"]',
+            ]:
                 loc = page.locator(sel).first
                 if await loc.count() > 0 and await loc.is_visible():
                     return True
@@ -129,7 +133,11 @@ class DouYinUploader(BasePublisher):
                 if await page.locator(f"text={txt}").count() > 0:
                     return True
             # 进度条存在 = 仍在传输中
-            for sel in ['div[class*="progress"]', 'div[class*="uploading"]', 'div[class*="loading"]']:
+            for sel in [
+                'div[class*="progress"]',
+                'div[class*="uploading"]',
+                'div[class*="loading"]',
+            ]:
                 loc = page.locator(sel).first
                 if await loc.count() > 0 and await loc.is_visible():
                     return False
@@ -145,7 +153,11 @@ class DouYinUploader(BasePublisher):
         )
 
     async def _fill_video_info(
-        self, page: Page, title: str = "", content: str = "", tags: List[str] = None,
+        self,
+        page: Page,
+        title: str = "",
+        content: str = "",
+        tags: List[str] = None,
     ) -> bool:
         try:
             await page.wait_for_selector(
@@ -184,7 +196,9 @@ class DouYinUploader(BasePublisher):
                     await page.keyboard.press("Enter")
                     added += 1
                 except Exception as e:
-                    self.logger.warning("标签添加失败", tag=clean_tag, reason=str(e)[:100])
+                    self.logger.warning(
+                        "标签添加失败", tag=clean_tag, reason=str(e)[:100]
+                    )
                 await page.wait_for_timeout(200)
 
             self.logger.info("标题与标签已填充", added=added, total=len(tags or []))
@@ -194,7 +208,9 @@ class DouYinUploader(BasePublisher):
             return False
 
     async def _set_thumbnail(
-        self, page: Page, thumbnail_path: Optional[str | Path],
+        self,
+        page: Page,
+        thumbnail_path: Optional[str | Path],
     ) -> bool:
         if not thumbnail_path:
             self.logger.info("未指定封面，跳过")
@@ -207,7 +223,11 @@ class DouYinUploader(BasePublisher):
             # 1) 点击"选择封面"按钮
             if not await self._click_first_visible(
                 page,
-                ['text="选择封面"', 'button:has-text("选择封面")', 'div[class*="cover"]'],
+                [
+                    'text="选择封面"',
+                    'button:has-text("选择封面")',
+                    'div[class*="cover"]',
+                ],
                 force=True,
                 timeout=3000,
             ):
@@ -277,9 +297,13 @@ class DouYinUploader(BasePublisher):
     async def _set_third_party_platforms(self, page: Page) -> bool:
         """关闭第三方平台同步开关。"""
         try:
-            switch = page.locator('[class^="info"] > [class^="first-part"] div div.semi-switch')
+            switch = page.locator(
+                '[class^="info"] > [class^="first-part"] div div.semi-switch'
+            )
             if await switch.count() > 0:
-                is_checked = "semi-switch-checked" in (await switch.evaluate("el => el.className"))
+                is_checked = "semi-switch-checked" in (
+                    await switch.evaluate("el => el.className")
+                )
                 if not is_checked:
                     await switch.locator("input.semi-switch-native-control").click()
             return True

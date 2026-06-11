@@ -219,7 +219,9 @@ class BaseUploader(ABC):
                 if cookie_ok:
                     # cookie 有效，使用浏览器上传
                     headless = self._headless_upload
-                    async with await StealthBrowser.create(headless=headless) as browser:
+                    async with await StealthBrowser.create(
+                        headless=headless
+                    ) as browser:
                         await browser.load_cookies_from_file(self.cookie_file_path)
                         async with await browser.new_page() as page:
                             await page.goto(self.publish_url)
