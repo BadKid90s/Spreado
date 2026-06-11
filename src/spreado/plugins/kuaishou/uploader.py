@@ -632,12 +632,29 @@ class KuaiShouUploader(BasePublisher):
     async def _publish_video(self, page: Page) -> bool:
         success_pattern = re.compile(r"/article/manage/video\?.*from=publish")
         try:
+            # 先滚动到底部确保发布按钮在视野内
+            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            await page.wait_for_timeout(300)
+
             # "发布"是自定义 div，用 JS click 最可靠
             clicked = await page.evaluate("""
 () => {
     const btns = document.querySelectorAll('[class*="_button-primary"]');
     for (const b of btns) {
-        if (b.innerText && b.innerText.includes('发布')) { b.click(); return true; }
+        if (b.innerText && b.innerText.includes('发布')) {
+            b.scrollIntoView({block: 'center'});
+            b.click();
+            return true;
+        }
+    }
+    // 备选: 搜索所有可见元素
+    const all = document.querySelectorAll('div, button, span');
+    for (const el of all) {
+        if (el.innerText === '发布' && el.offsetParent !== null) {
+            el.scrollIntoView({block: 'center'});
+            el.click();
+            return true;
+        }
     }
     return false;
 }
@@ -645,7 +662,7 @@ class KuaiShouUploader(BasePublisher):
             if not clicked:
                 self.logger.error("未找到发布按钮")
                 return False
-            await page.wait_for_timeout(1500)
+            await page.wait_for_timeout(2000)
 
             # 处理"确认发布"弹窗
             confirm_btn = page.locator(
