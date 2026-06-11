@@ -10,6 +10,7 @@ from typing import List, Optional
 from playwright.async_api import Error, Page
 
 from spreado.core.base_publisher import BasePublisher
+from spreado.core.browser import StealthBrowser
 
 
 class XiaoHongShuUploader(BasePublisher):
@@ -36,6 +37,14 @@ class XiaoHongShuUploader(BasePublisher):
         return f"{self.publish_url}?from=homepage&target=video"
 
     @property
+    def _image_text_upload_url(self) -> str:
+        return f"{self.publish_url}?from=tab_switch&target=image"
+
+    @property
+    def supported_content_types(self) -> List[str]:
+        return ["video", "image_text"]
+
+    @property
     def _login_selectors(self) -> List[str]:
         return [
             'text="短信登录"',
@@ -46,10 +55,148 @@ class XiaoHongShuUploader(BasePublisher):
 
     @property
     def _authed_selectors(self) -> List[str]:
-        # 上传页才会渲染的元素：视频上传 input + 顶部的"上传视频"按钮
         return ["input.upload-input", 'button:has-text("上传视频")']
 
-    # ---------------------------------------------------------------- 主流程
+    # ---------------------------------------------------------------- 图文发布
+
+    async def _upload_images(self, page: Page, image_paths: List[str | Path]) -> bool:
+        """上传图片到图文编辑器。"""
+        try:
+            inp = page.locator("input.upload-input")
+            await inp.wait_for(state="attached", timeout=10000)
+            files = [str(Path(p).resolve()) for p in image_paths]
+            await inp.set_input_files(files)
+            self.logger.info("图片已上传", count=len(files))
+            return True
+        except Exception as e:
+            self.logger.error("图片上传失败", reason=str(e)[:200])
+            return False
+
+    async def _wait_for_image_upload_complete(self, page: Page) -> bool:
+        """等待图片上传完成：标题输入框出现。"""
+
+        async def check() -> bool:
+            title = page.locator("input[placeholder*='填写标题']").first
+            if await title.count() > 0 and await title.is_visible():
+                return True
+            return False
+
+        return await self._wait_for_condition(
+            check, timeout=120.0, interval=1.5, desc="image_upload_complete"
+        )
+
+    async def _upload_image_text(
+        self,
+        page: Page,
+        image_paths: List[str | Path],
+        title: str = "",
+        content: str = "",
+        tags: List[str] = None,
+        publish_date: Optional[datetime] = None,
+        thumbnail_path: Optional[str | Path] = None,
+    ) -> bool:
+        """图文发布主流程。"""
+        try:
+            with self.logger.step(
+                "upload_image_text", title=title, images=str(len(image_paths))
+            ):
+                with self.logger.step("goto_upload_page"):
+                    await page.goto(self._image_text_upload_url)
+                    try:
+                        await page.wait_for_url(
+                            self._image_text_upload_url, timeout=5000
+                        )
+                    except Error:
+                        pass
+
+                with self.logger.step("upload_images", count=len(image_paths)):
+                    if not await self._upload_images(page, image_paths):
+                        return False
+
+                with self.logger.step("wait_for_upload_complete"):
+                    if not await self._wait_for_image_upload_complete(page):
+                        return False
+
+                with self.logger.step("fill_video_info", title=title):
+                    if not await self._fill_video_info(page, title, content, tags):
+                        return False
+
+                with self.logger.step(
+                    "set_thumbnail", path=str(thumbnail_path or "")
+                ):
+                    if not await self._set_thumbnail(page, thumbnail_path):
+                        return False
+
+                if publish_date:
+                    with self.logger.step(
+                        "set_schedule_time", at=publish_date.isoformat()
+                    ):
+                        if not await self._set_schedule_time(page, publish_date):
+                            return False
+
+                with self.logger.step("publish_video"):
+                    if not await self._publish_video(page):
+                        return False
+            return True
+        except Exception as e:
+            self.logger.error("upload_image_text 异常", reason=str(e)[:200])
+            return False
+
+    async def publish_image_text(self, task) -> bool:
+        """基于 Task 模型发布图文。"""
+        if not task.media_files:
+            self.logger.error("任务缺少图片文件")
+            return False
+
+        cookie_ok = await self.verify_cookie_flow(auto_login=False)
+        if cookie_ok:
+            async with await StealthBrowser.create(
+                headless=True
+            ) as browser:
+                await browser.load_cookies_from_file(self.cookie_file_path)
+                async with await browser.new_page() as page:
+                    return await self._upload_image_text(
+                        page=page,
+                        image_paths=task.media_files,
+                        title=task.title,
+                        content=task.content,
+                        tags=task.tags,
+                        publish_date=task.publish_date,
+                        thumbnail_path=task.thumbnail_path,
+                    )
+
+        # cookie 无效，登录并上传
+        self.logger.info("cookie 无效，启动登录流程")
+        try:
+            async with await StealthBrowser.create(
+                headless=False, channel=self._browser_channel
+            ) as browser:
+                page = await browser.new_page()
+                await page.goto(self.login_url)
+                self.logger.info("等待用户在浏览器内完成登录…")
+                if not await self._wait_for_login(page, timeout=120.0):
+                    raise RuntimeError("登录超时")
+                self.cookie_file_path.parent.mkdir(parents=True, exist_ok=True)
+                await page.context.storage_state(path=self.cookie_file_path)
+                self.logger.info("cookie 已保存")
+                await page.goto(self._image_text_upload_url)
+                await page.wait_for_timeout(3000)
+                if await self._check_login_required(page):
+                    raise RuntimeError("登录后发布页仍要求登录")
+                return await self._upload_image_text(
+                    page=page,
+                    image_paths=task.media_files,
+                    title=task.title,
+                    content=task.content,
+                    tags=task.tags,
+                    publish_date=task.publish_date,
+                    thumbnail_path=task.thumbnail_path,
+                )
+        except Exception as e:
+            self.logger.error("登录并上传图文失败", reason=str(e)[:200])
+            return False
+
+    # ---------------------------------------------------------------- 视频发布
 
     async def _upload_video(
         self,
