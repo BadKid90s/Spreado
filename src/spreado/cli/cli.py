@@ -13,6 +13,10 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from typing import List
 
+# Windows GBK 兼容：强制 stdout 使用 UTF-8，避免 emoji 打印报错
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 from ..plugin_loader import get_plugin_loader
 from ..utils import get_logger
 
@@ -43,10 +47,12 @@ def _get_platform_choices(include_all: bool = False) -> List[str]:
     return names
 
 
-def get_publisher(platform: str, cookies: str = None):
+def get_publisher(platform: str, cookies: str = None, headless: bool = True):
     """获取发布器实例"""
     loader = get_plugin_loader()
-    publisher = loader.get_publisher(platform, cookie_file_path=cookies)
+    publisher = loader.get_publisher(
+        platform, cookie_file_path=cookies, headless=headless
+    )
     if not publisher:
         raise ValueError(f"不支持的平台: {platform}")
     return publisher
@@ -179,7 +185,9 @@ async def upload_single_platform(
     logger.info(f"开始上传到: {platform_name}")
 
     try:
-        publisher = get_publisher(platform=platform, cookies=args.cookies)
+        publisher = get_publisher(
+            platform=platform, cookies=args.cookies, headless=not args.headed
+        )
 
         result = await publisher.upload_video_flow(
             file_path=video_path,
@@ -255,6 +263,7 @@ async def cmd_upload(args):
     print(
         f"  定时: {publish_date.strftime('%Y-%m-%d %H:%M') if publish_date else '立即发布'}"
     )
+    print(f"  模式: {'有头' if args.headed else '无头'}")
     print(f"  平台: {', '.join(platform_names.get(p, p) for p in platforms)}")
     print(f"{'=' * 50}\n")
 
@@ -425,6 +434,9 @@ def create_parser():
         "--schedule", type=str, help='定时发布 (小时数 或 "YYYY-MM-DD HH:MM")'
     )
     upload_parser.add_argument("--cookies", type=str, help="Cookie 文件路径")
+    upload_parser.add_argument(
+        "--headed", action="store_true", help="使用有头模式（可见浏览器）上传"
+    )
     upload_parser.add_argument(
         "--parallel", "-p", action="store_true", help="并行上传到多个平台"
     )

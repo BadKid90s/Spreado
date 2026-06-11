@@ -80,7 +80,7 @@ class ShiPinHaoUploader(BasePublisher):
 
     async def _shadow_eval(self, page: Page, js: str) -> Any:
         """在 wujie shadow root 上下文执行 JS 并返回结果。"""
-        return await page.evaluate(_SHADOW_EVAL % js)
+        return await page.evaluate(_SHADOW_EVAL % js.strip())
 
     async def _shadow_wait(
         self, page: Page, selector: str, timeout: float = 20.0
@@ -160,6 +160,20 @@ class ShiPinHaoUploader(BasePublisher):
 
     # ---------------------------------------------------------------- 主流程
 
+    async def _wait_for_publish_page_ready(
+        self, page: Page, timeout: float = 20.0
+    ) -> bool:
+        """导航到发布页后等待 wujie shadow DOM 渲染完毕。"""
+        try:
+            await page.wait_for_url(self.publish_url, timeout=5000)
+        except Exception:
+            pass
+        # 等待 file input（视频上传区域）渲染
+        if not await self._shadow_wait(page, 'input[type="file"]', timeout=timeout):
+            self.logger.error("wujie shadow DOM 未渲染 upload 区域", url=page.url)
+            return False
+        return True
+
     async def _upload_video(
         self,
         page: Page,
@@ -174,15 +188,8 @@ class ShiPinHaoUploader(BasePublisher):
             with self.logger.step("upload_video", title=title, file=str(file_path)):
                 with self.logger.step("goto_upload_page"):
                     await page.goto(self.publish_url)
-                    try:
-                        await page.wait_for_url(self.publish_url, timeout=5000)
-                    except Exception:
-                        pass
-                    # 等待 wujie shadow DOM 内容渲染
-                    if not await self._shadow_wait(
-                        page, 'input[type="file"]', timeout=20
-                    ):
-                        raise RuntimeError("wujie shadow DOM 未渲染 upload 区域")
+                    if not await self._wait_for_publish_page_ready(page):
+                        raise RuntimeError("发布页未就绪")
 
                 with self.logger.step("upload_video_file", file=str(file_path)):
                     if not await self._upload_video_file(page, file_path):
@@ -222,7 +229,9 @@ class ShiPinHaoUploader(BasePublisher):
     # ---------------------------------------------------------------- 子步骤
 
     async def _upload_video_file(self, page: Page, file_path: str | Path) -> bool:
-        ok = await self._cdp_set_file(page, 'input[type="file"]', str(file_path))
+        ok = await self._cdp_set_file(
+            page, 'input[type="file"][accept*="video"]', str(file_path)
+        )
         if ok:
             self.logger.info("视频文件已注入")
         else:
@@ -230,7 +239,7 @@ class ShiPinHaoUploader(BasePublisher):
         return ok
 
     async def _wait_for_upload_complete(self, page: Page) -> bool:
-        """轮询直到发表按钮可点击（非 disabled），或出现预览/编辑区。"""
+        """轮询直到视频上传完成：发表按钮变为可点击状态。"""
 
         async def check() -> bool:
             try:
@@ -239,11 +248,17 @@ class ShiPinHaoUploader(BasePublisher):
     const w = document.querySelector('wujie-app');
     const s = w && w.shadowRoot;
     if (!s) return null;
-    const btn = s.querySelector('button.weui-desktop-btn_primary');
-    const progress = s.querySelector('[class*="progress"]');
-    const editor = s.querySelector('.input-editor');
-    if (btn && !btn.className.includes('disabled')) return true;
-    if (editor && !progress) return true;
+    // 找到"发表"按钮，检查其是否已从 disabled 变为可点击
+    const btns = s.querySelectorAll('button.weui-desktop-btn_primary');
+    for (const b of btns) {
+        if (b.innerText.includes('发表') && !b.className.includes('disabled') && !b.className.includes('weui-desktop-btn_disabled')) {
+            return true;
+        }
+    }
+    // 检查视频预览/编辑区是否出现（上传完成的另一个信号）
+    const preview = s.querySelector('.input-editor');
+    const progress = s.querySelector('.ant-upload-list-progress, [class*="upload"][class*="progress"]');
+    if (preview && !progress) return true;
     return false;
 }
 """)
@@ -268,23 +283,24 @@ class ShiPinHaoUploader(BasePublisher):
             )
             await page.wait_for_timeout(500)
 
-            # 输入标题
-            await page.keyboard.type(title)
+            # 输入标题 (insert_text 比 type 更快更可靠)
+            await page.keyboard.insert_text(title)
             await page.keyboard.press("Enter")
             await page.wait_for_timeout(300)
 
             # 输入正文
-            await page.keyboard.type(content)
-            await page.keyboard.press("Enter")
-            await page.wait_for_timeout(300)
+            if content:
+                await page.keyboard.insert_text(content)
+                await page.keyboard.press("Enter")
+                await page.wait_for_timeout(300)
 
             # 输入标签
             if tags:
                 for tag in tags:
                     tag_text = tag if tag.startswith("#") else "#" + tag
-                    await page.keyboard.type(tag_text)
+                    await page.keyboard.insert_text(tag_text)
                     await page.keyboard.press("Space")
-                    await page.wait_for_timeout(300)
+                    await page.wait_for_timeout(200)
 
             self.logger.info("标题与标签已填充", total=len(tags or []))
             return True
@@ -298,80 +314,28 @@ class ShiPinHaoUploader(BasePublisher):
         if not thumbnail_path:
             self.logger.info("无封面，跳过")
             return True
-        if not Path(thumbnail_path).exists():
-            self.logger.warning("封面文件不存在，跳过", path=str(thumbnail_path))
-            return True
-
-        try:
-            # 1) 点击个人主页卡片
-            clicked = await self._shadow_eval(
-                page,
-                """
-(() => {
-    const el = s.querySelector('div.tips-wrap div.cover-tips');
-    if (el && el.innerText.includes('个人主页卡片')) {
-        el.closest('.tips-wrap').click();
-        return true;
-    }
-    return false;
-})()
-""",
-            )
-            if not clicked:
-                self.logger.warning("未找到个人主页卡片入口，跳过封面")
-                return True
-            self.logger.info("已点击个人主页卡片")
-
-            # 2) 等待上传封面元素
-            await self._shadow_wait(page, "div.single-cover-uploader-wrap", timeout=10)
-
-            # 3) 通过 CDP 注入封面图片
-            ok = await self._cdp_set_file(
-                page,
-                'div.single-cover-uploader-wrap input[type="file"][accept*="image"]',
-                str(thumbnail_path),
-            )
-            if not ok:
-                self.logger.error("封面图片注入失败")
-                return False
-            self.logger.info("封面图片已选择")
-
-            # 4) 等待裁剪对话框出现
-            await self._shadow_wait(
-                page, "div.weui-desktop-dialog__wrp:visible", timeout=10
-            )
-            await self._shadow_eval(
-                page,
-                """
-(() => {
-    const btns = s.querySelectorAll('div.cover-set-footer button');
-    for (const b of btns) { if (b.innerText.includes('确认')) { b.click(); break; } }
-})()
-""",
-            )
-            self.logger.info("封面设置完成")
-            await page.wait_for_timeout(2000)
-            return True
-
-        except Exception as e:
-            self.logger.error("封面设置失败", reason=str(e)[:200])
-            return False
+        # 当前 shipinhao 发布页已移除"个人主页卡片"封面入口，
+        # 封面仅在发布后通过"修改描述和封面"功能设置。
+        self.logger.info(
+            "封面设置不支持：shipinhao 发布页已无封面入口，请在发布后通过列表页手动设置"
+        )
+        return True
 
     async def _set_schedule_time(self, page: Page, publish_date: datetime) -> bool:
         try:
-            # 点击定时选项
+            # 1) 点击"定时" radio label
             await self._shadow_eval(
                 page,
                 """
 (() => {
-    const labels = s.querySelectorAll('label');
-    for (const l of labels) { if (l.innerText.includes('定时')) { l.click(); break; } }
+    const labels = s.querySelectorAll('label.weui-desktop-form__check-label');
+    for (const l of labels) { if (l.innerText.includes('定时')) { l.click(); return; } }
 })()
 """,
             )
-            await page.wait_for_timeout(500)
+            await page.wait_for_timeout(800)
 
-            # 日期选择
+            # 2) 在日历中选择日期
             day_str = str(publish_date.day)
             await self._shadow_eval(
                 page,
@@ -380,7 +344,7 @@ class ShiPinHaoUploader(BasePublisher):
     const cells = s.querySelectorAll('table a');
     for (const c of cells) {{
         if (!c.className.includes('disabled') && c.innerText.trim() === '{day_str}') {{
-            c.click(); break;
+            c.click(); return;
         }}
     }}
 }})()
@@ -388,21 +352,30 @@ class ShiPinHaoUploader(BasePublisher):
             )
             await page.wait_for_timeout(500)
 
-            # 时间输入
+            # 3) 填入时间 — 先尝试直接设置 value，再用键盘作为备选
             time_str = publish_date.strftime("%H:%M")
-            await self._shadow_eval(
+            set_ok = await self._shadow_eval(
                 page,
-                """
-(() => {
-    const inp = s.querySelector('input[placeholder*="时间"]');
-    if (inp) { inp.click(); }
-})()
+                f"""
+(() => {{
+    const inp = s.querySelector('input[placeholder="请选择时间"]');
+    if (inp) {{
+        inp.focus();
+        inp.value = '{time_str}';
+        inp.dispatchEvent(new Event('input', {{bubbles: true}}));
+        inp.dispatchEvent(new Event('change', {{bubbles: true}}));
+        return true;
+    }}
+    return false;
+}})()
 """,
             )
-            await page.keyboard.press("Control+KeyA")
-            await page.keyboard.type(time_str)
-            await page.keyboard.press("Enter")
-            await page.wait_for_timeout(500)
+            if not set_ok:
+                # 备选：通过键盘输入时间
+                await page.keyboard.press("Control+KeyA")
+                await page.keyboard.type(time_str)
+                await page.keyboard.press("Enter")
+                await page.wait_for_timeout(500)
 
             self.logger.info("定时发布时间设置完成")
             return True
@@ -417,12 +390,25 @@ class ShiPinHaoUploader(BasePublisher):
                 page,
                 f"""
 (() => {{
-    const els = s.querySelectorAll('span input[type="text"]');
-    for (const inp of els) {{
-        const wrap = inp.closest('.form-item');
-        if (wrap && wrap.innerText.includes('短标题')) {{
-            inp.focus(); inp.value = '{short_title}';
-            inp.dispatchEvent(new Event('input', {{bubbles: true}}));
+    const inp = s.querySelector('input[placeholder*="短标题"]');
+    if (inp) {{
+        inp.focus();
+        inp.value = '{short_title}';
+        inp.dispatchEvent(new Event('input', {{bubbles: true}}));
+        inp.dispatchEvent(new Event('change', {{bubbles: true}}));
+        return;
+    }}
+    // 备选：通过 .form-item 文本查找
+    const items = s.querySelectorAll('.form-item');
+    for (const item of items) {{
+        if (item.innerText.includes('短标题')) {{
+            const input = item.querySelector('input[type="text"]');
+            if (input) {{
+                input.focus();
+                input.value = '{short_title}';
+                input.dispatchEvent(new Event('input', {{bubbles: true}}));
+                input.dispatchEvent(new Event('change', {{bubbles: true}}));
+            }}
             return;
         }}
     }}
@@ -441,10 +427,12 @@ class ShiPinHaoUploader(BasePublisher):
                 page,
                 """
 (() => {
-    const btns = s.querySelectorAll('div.form-btns button');
-    for (const b of btns) { if (b.innerText.includes('发表') && !b.className.includes('disabled')) {
-        b.click(); return true;
-    }}
+    const btns = s.querySelectorAll('button.weui-desktop-btn_primary');
+    for (const b of btns) {
+        if (b.innerText.includes('发表') && !b.className.includes('disabled') && !b.className.includes('weui-desktop-btn_disabled')) {
+            b.click(); return true;
+        }
+    }
     return false;
 })()
 """,
