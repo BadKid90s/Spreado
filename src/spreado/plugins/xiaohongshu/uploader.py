@@ -323,20 +323,19 @@ class XiaoHongShuUploader(BasePublisher):
                 timeout=10000,
             )
 
+            # 填写标题 — 用键盘输入触发 Vue 响应
             title_container = page.locator("input[placeholder*='填写标题']")
             if await title_container.count() > 0:
-                await title_container.fill(title[:20])
-            else:
-                fallback = page.locator(".notranslate")
-                await fallback.click()
-                await page.keyboard.press("Backspace")
-                await page.keyboard.press("Control+KeyA")
-                await page.keyboard.press("Delete")
+                await title_container.click()
+                await page.wait_for_timeout(200)
                 await page.keyboard.type(title[:20])
 
+            # 填写正文
             desc = page.locator("div.tiptap-container div[contenteditable]")
             await desc.click()
-            await desc.fill(content)
+            await page.wait_for_timeout(300)
+            if content:
+                await page.keyboard.type(content)
 
             added = 0
             for tag in tags or []:
