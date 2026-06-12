@@ -521,44 +521,63 @@ class XiaoHongShuUploader(BasePublisher):
                 self.logger.info("发布成功(快捷键)")
                 return True
 
-            # 2) 查找并点击发布按钮
+            # 2) 等待发布按钮出现并点击
             # 先滚动到底部确保按钮可见
             await page.evaluate(
                 "window.scrollTo(0, document.body.scrollHeight)"
             )
-            await page.wait_for_timeout(300)
+            await page.wait_for_timeout(500)
 
-            # 优先用 JS click（对 Vue 组件最可靠）
+            # 等待按钮渲染
+            try:
+                await page.wait_for_selector(
+                    ".publish-page-publish-btn button.ce-btn.bg-red",
+                    state="visible",
+                    timeout=10000,
+                )
+            except Error:
+                pass
+
+            # JS click 对 Vue 组件最可靠
             clicked = await page.evaluate("""
 () => {
     const btn = document.querySelector('.publish-page-publish-btn button.ce-btn.bg-red');
     if (btn && btn.offsetParent !== null) {
         btn.scrollIntoView({block: 'center'});
         btn.click();
-        return 'js_click';
+        return true;
     }
-    return null;
+    // 备选: 找包含"发布"文本的 ce-btn
+    const btns = document.querySelectorAll('button.ce-btn');
+    for (const b of btns) {
+        if (b.innerText === '发布' && b.offsetParent !== null) {
+            b.scrollIntoView({block: 'center'});
+            b.click();
+            return true;
+        }
+    }
+    return false;
 }
 """)
             if clicked:
-                self.logger.info("已点击发布按钮(JS)", method=clicked)
+                self.logger.info("已点击发布按钮")
                 await page.wait_for_timeout(3000)
                 if await _check_success():
-                    self.logger.info("发布成功(JS)")
+                    self.logger.info("发布成功")
                     return True
-            else:
-                # 备选: Playwright locator
-                publish_btn = page.locator(
-                    '.publish-page-publish-btn button.ce-btn.bg-red'
-                ).first
-                if await publish_btn.count() > 0 and await publish_btn.is_visible():
-                    await publish_btn.scroll_into_view_if_needed()
-                    await publish_btn.click(force=True)
-                    self.logger.info("已点击发布按钮(locator)")
-                    await page.wait_for_timeout(3000)
-                    if await _check_success():
-                        self.logger.info("发布成功(locator)")
-                        return True
+
+            # 3) Playwright locator 备选
+            publish_btn = page.locator(
+                ".publish-page-publish-btn button.ce-btn.bg-red"
+            ).first
+            if await publish_btn.count() > 0 and await publish_btn.is_visible():
+                await publish_btn.scroll_into_view_if_needed()
+                await publish_btn.click(force=True)
+                self.logger.info("已点击发布按钮(locator)")
+                await page.wait_for_timeout(3000)
+                if await _check_success():
+                    self.logger.info("发布成功(locator)")
+                    return True
 
             # 3) 等待结果兜底
             for _ in range(10):
