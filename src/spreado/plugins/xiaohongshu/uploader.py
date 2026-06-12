@@ -521,41 +521,20 @@ class XiaoHongShuUploader(BasePublisher):
                 self.logger.info("发布成功(快捷键)")
                 return True
 
-            # 2) 查找发布按钮（排除侧边栏"发布笔记"）
-            for sel in [
-                'button:has-text("发布"):not(:has-text("笔记"))',
-                '[class*="publish-btn"] button:has-text("发布")',
-                '.publish-page-container button:has-text("发布")',
-            ]:
-                btn = page.locator(sel).first
-                if await btn.count() > 0 and await btn.is_visible():
-                    await btn.scroll_into_view_if_needed()
-                    await btn.click(force=True)
-                    self.logger.info("已点击发布按钮", selector=sel)
-                    await page.wait_for_timeout(3000)
-                    if await _check_success():
-                        self.logger.info("发布成功(按钮)")
-                        return True
-                    break
-            else:
-                # 备选：JS 查找精确文本"发布"的元素
-                clicked = await page.evaluate("""
-() => {
-    const all = document.querySelectorAll('div, button, span');
-    for (const el of all) {
-        if (el.innerText === '发布' && el.offsetParent !== null) {
-            el.click(); return true;
-        }
-    }
-    return false;
-}
-""")
-                if clicked:
-                    self.logger.info("已通过 JS 点击发布按钮")
-                    await page.wait_for_timeout(3000)
-                    if await _check_success():
-                        self.logger.info("发布成功(JS)")
-                        return True
+            # 2) 查找发布按钮
+            publish_btn = page.locator(
+                '.publish-page-publish-btn button.ce-btn.bg-red:has-text("发布")'
+            ).first
+            if await publish_btn.count() == 0:
+                publish_btn = page.locator('button.ce-btn.bg-red:has-text("发布")').first
+            if await publish_btn.count() > 0 and await publish_btn.is_visible():
+                await publish_btn.scroll_into_view_if_needed()
+                await publish_btn.click(force=True)
+                self.logger.info("已点击发布按钮")
+                await page.wait_for_timeout(3000)
+                if await _check_success():
+                    self.logger.info("发布成功(按钮)")
+                    return True
 
             # 3) 等待结果兜底
             for _ in range(10):
