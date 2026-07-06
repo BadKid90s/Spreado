@@ -165,6 +165,18 @@ class StealthBrowser:
             no_viewport=True, ignore_https_errors=True
         )
 
+        # Patch attachShadow to force all shadow roots to 'open' mode
+        # This allows Playwright's page.evaluate() to access closed shadow DOMs
+        await self.context.add_init_script("""
+            Element.prototype._attachShadow = Element.prototype.attachShadow;
+            Element.prototype.attachShadow = function(init) {
+                if (init && init.mode === 'closed') {
+                    init = Object.assign({}, init, { mode: 'open' });
+                }
+                return this._attachShadow(init);
+            };
+        """)
+
         stealth = Stealth(
             navigator_languages_override=("zh-CN", "zh"), init_scripts_only=True
         )
