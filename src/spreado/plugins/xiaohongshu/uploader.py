@@ -10,6 +10,8 @@ from typing import List, Optional
 from playwright.async_api import Error, Page
 
 from spreado.core.base_publisher import BasePublisher
+from spreado.core.browser import StealthBrowser
+from spreado.models.task import Task
 
 
 class XiaoHongShuUploader(BasePublisher):
@@ -36,6 +38,14 @@ class XiaoHongShuUploader(BasePublisher):
         return f"{self.publish_url}?from=homepage&target=video"
 
     @property
+    def _image_upload_url(self) -> str:
+        return f"{self.publish_url}?from=menu&target=image"
+
+    @property
+    def supported_content_types(self) -> List[str]:
+        return ["video", "image_text"]
+
+    @property
     def _login_selectors(self) -> List[str]:
         return [
             'text="短信登录"',
@@ -50,6 +60,109 @@ class XiaoHongShuUploader(BasePublisher):
         return ["input.upload-input", 'button:has-text("上传视频")']
 
     # ---------------------------------------------------------------- 主流程
+
+    async def publish_image_text(self, task: Task) -> bool:
+        if not task.media_files:
+            self.logger.error("[!] 图文任务缺少图片素材")
+            return False
+
+        return await self.upload_image_text_flow(
+            image_paths=task.media_files,
+            title=task.title,
+            content=task.content,
+            tags=task.tags,
+            publish_date=task.publish_date,
+        )
+
+    async def upload_image_text_flow(
+        self,
+        image_paths: List[str | Path],
+        title: str = "",
+        content: str = "",
+        tags: List[str] = None,
+        publish_date: Optional[datetime] = None,
+        auto_login: bool = False,
+    ) -> bool:
+        try:
+            with self.logger.step("upload_image_text_flow", title=title) as step:
+                paths = [Path(path) for path in image_paths]
+                missing = [str(path) for path in paths if not path.exists()]
+                if missing:
+                    self.logger.error("图片文件不存在", files=missing)
+                    return False
+
+                cookie_ok = await self.verify_cookie_flow(auto_login=auto_login)
+                if not cookie_ok:
+                    raise RuntimeError("cookie 无效")
+
+                async with await StealthBrowser.create(
+                    headless=self._upload_headless
+                ) as browser:
+                    await browser.load_cookies_from_file(self.cookie_file_path)
+                    async with await browser.new_page() as page:
+                        await page.goto(self.publish_url)
+                        ok = await self._upload_image_text(
+                            page=page,
+                            image_paths=paths,
+                            title=title,
+                            content=content,
+                            tags=tags,
+                            publish_date=publish_date,
+                        )
+                        step.add_field(result="success" if ok else "failure")
+                        return ok
+        except Exception as e:
+            self.logger.error("图文上传流程异常", reason=str(e)[:200])
+            return False
+
+    async def _upload_image_text(
+        self,
+        page: Page,
+        image_paths: List[str | Path],
+        title: str = "",
+        content: str = "",
+        tags: List[str] = None,
+        publish_date: Optional[datetime] = None,
+    ) -> bool:
+        try:
+            with self.logger.step(
+                "upload_image_text", title=title, images=len(image_paths)
+            ):
+                with self.logger.step("goto_image_upload_page"):
+                    await page.goto(self._image_upload_url)
+                    try:
+                        await page.wait_for_url(self._image_upload_url, timeout=5000)
+                    except Error:
+                        pass
+
+                with self.logger.step("upload_image_files"):
+                    if not await self._upload_image_files(page, image_paths):
+                        return False
+
+                with self.logger.step("wait_for_images_ready"):
+                    if not await self._wait_for_images_ready(page):
+                        return False
+
+                with self.logger.step("fill_image_text_info", title=title):
+                    if not await self._fill_image_text_info(
+                        page, title, content, tags
+                    ):
+                        return False
+
+                if publish_date:
+                    with self.logger.step(
+                        "set_schedule_time", at=publish_date.isoformat()
+                    ):
+                        if not await self._set_schedule_time(page, publish_date):
+                            return False
+
+                with self.logger.step("publish_image_text"):
+                    if not await self._publish_image_text(page):
+                        return False
+            return True
+        except Exception as e:
+            self.logger.error("upload_image_text 异常", reason=str(e)[:200])
+            return False
 
     async def _upload_video(
         self,
@@ -102,6 +215,184 @@ class XiaoHongShuUploader(BasePublisher):
             return False
 
     # ---------------------------------------------------------------- 子步骤
+
+    async def _upload_image_files(
+        self, page: Page, image_paths: List[str | Path]
+    ) -> bool:
+        try:
+            await page.wait_for_selector(
+                'button:has-text("上传图片"), input[type="file"][accept*="image"], input.upload-input',
+                state="attached",
+                timeout=15000,
+            )
+
+            upload_button = page.get_by_role("button", name=re.compile("上传图片"))
+            if await upload_button.count() > 0:
+                try:
+                    await upload_button.first.set_input_files(image_paths)
+                    return True
+                except Exception as e:
+                    self.logger.debug(
+                        "按钮 set_input_files 失败，降级到 input",
+                        reason=str(e)[:100],
+                    )
+
+            input_selectors = [
+                'input[type="file"][accept*="image"]',
+                'input.upload-input[type="file"]',
+                'input[type="file"]',
+            ]
+            if not await self._wait_until_attached(
+                page, input_selectors, timeout=10000
+            ):
+                self.logger.error("未找到图片上传 input")
+                return False
+
+            for selector in input_selectors:
+                try:
+                    inp = page.locator(selector).first
+                    if await inp.count() == 0:
+                        continue
+                    await inp.wait_for(state="attached", timeout=3000)
+                    await inp.set_input_files(image_paths)
+                    return True
+                except Exception as e:
+                    self.logger.debug(
+                        "图片 input 注入失败",
+                        selector=selector,
+                        reason=str(e)[:100],
+                    )
+                    continue
+
+            self.logger.error("图片文件注入失败")
+            return False
+        except Exception as e:
+            self.logger.error("图片文件上传失败", reason=str(e)[:200])
+            return False
+
+    async def _wait_for_images_ready(self, page: Page) -> bool:
+        preview_selectors = [
+            'img[src^="blob:"]',
+            'div[class*="image"] img',
+            'div[class*="preview"] img',
+            'div[class*="upload"] img',
+        ]
+        editor_selectors = [
+            "input[placeholder*='填写标题']",
+            "textarea[placeholder*='正文']",
+            "div[contenteditable='true']",
+            ".tiptap-container",
+        ]
+        progress_selectors = [
+            "div.el-progress-bar",
+            'div[class*="progress"]',
+            'div[class*="uploading"]',
+            'div[class*="loading"]',
+        ]
+
+        async def check() -> bool:
+            for selector in preview_selectors:
+                el = page.locator(selector)
+                if await el.count() > 0 and await el.first.is_visible():
+                    return True
+
+            has_progress = False
+            for selector in progress_selectors:
+                el = page.locator(selector)
+                if await el.count() > 0 and await el.first.is_visible():
+                    has_progress = True
+                    break
+            if has_progress:
+                return False
+
+            for selector in editor_selectors:
+                el = page.locator(selector)
+                if await el.count() > 0 and await el.first.is_visible():
+                    return True
+            return False
+
+        return await self._wait_for_condition(
+            check, timeout=120.0, interval=1.0, desc="images_ready"
+        )
+
+    async def _fill_image_text_info(
+        self,
+        page: Page,
+        title: str = "",
+        content: str = "",
+        tags: List[str] = None,
+    ) -> bool:
+        try:
+            await page.wait_for_selector(
+                "input[placeholder*='填写标题'], textarea, div[contenteditable='true']",
+                state="visible",
+                timeout=15000,
+            )
+
+            title_input = page.get_by_role(
+                "textbox", name=re.compile("填写标题")
+            ).first
+            if await title_input.count() == 0:
+                title_input = page.locator("input[placeholder*='填写标题']").first
+            if await title_input.count() > 0:
+                await title_input.click()
+                await title_input.fill(title[:20])
+            elif title:
+                self.logger.warning("未找到标题输入框，跳过标题")
+
+            body_text = self._build_image_text_content(content, tags)
+            if not body_text:
+                return True
+
+            body_candidates = [
+                "div.tiptap-container div[contenteditable='true']",
+                "div[contenteditable='true']",
+                "textarea[placeholder*='正文']",
+                "textarea",
+            ]
+            body = None
+            for selector in body_candidates:
+                candidate = page.locator(selector).first
+                if await candidate.count() == 0:
+                    continue
+                try:
+                    await candidate.wait_for(state="visible", timeout=3000)
+                    body = candidate
+                    break
+                except Error:
+                    continue
+
+            if body is None:
+                textboxes = page.get_by_role("textbox")
+                if await textboxes.count() > 1:
+                    body = textboxes.nth(1)
+
+            if body is None:
+                self.logger.error("未找到正文输入框")
+                return False
+
+            await body.click()
+            try:
+                await body.fill(body_text)
+            except Exception:
+                await page.keyboard.press("Control+KeyA")
+                await page.keyboard.press("Delete")
+                await page.keyboard.type(body_text)
+
+            return True
+        except Exception as e:
+            self.logger.error("填写图文信息失败", reason=str(e)[:200])
+            return False
+
+    def _build_image_text_content(self, content: str = "", tags: List[str] = None) -> str:
+        parts = []
+        if content:
+            parts.append(content)
+        for tag in tags or []:
+            clean_tag = tag.strip().lstrip("#")
+            if clean_tag:
+                parts.append(f"#{clean_tag}[话题]#")
+        return " ".join(parts)
 
     async def _upload_video_file(self, page: Page, file_path: str | Path) -> bool:
         try:
@@ -355,19 +646,61 @@ class XiaoHongShuUploader(BasePublisher):
             return False
 
     async def _publish_video(self, page: Page) -> bool:
+        return await self._click_publish_button(page)
+
+    async def _publish_image_text(self, page: Page) -> bool:
+        return await self._click_publish_button(page)
+
+    async def _click_publish_button(self, page: Page) -> bool:
         try:
             button = page.get_by_role("button", name=re.compile("发布|定时发布")).first
-            if await button.count() == 0:
-                self.logger.error("未找到发布按钮")
-                return False
-            await button.scroll_into_view_if_needed()
-            await button.wait_for(state="visible", timeout=10000)
-            return await self._click_and_wait_for_url(
-                page,
-                button,
-                re.compile(r"/success|published=true"),
-                timeout=30000,
-            )
+            if await button.count() > 0:
+                await button.scroll_into_view_if_needed()
+                await button.wait_for(state="visible", timeout=10000)
+                return await self._click_and_wait_for_url(
+                    page,
+                    button,
+                    re.compile(r"/success|published=true"),
+                    timeout=30000,
+                )
+
+            if await self._click_xhs_publish_host(page):
+                return True
+
+            self.logger.error("未找到发布按钮")
+            return False
         except Exception as e:
             self.logger.error("发布异常", reason=str(e)[:200])
+            return False
+
+    async def _click_xhs_publish_host(self, page: Page) -> bool:
+        try:
+            host = page.locator('xhs-publish-btn[submit-disabled="false"]').first
+            if await host.count() == 0:
+                return False
+            await host.scroll_into_view_if_needed()
+            await host.wait_for(state="visible", timeout=10000)
+            box = await host.bounding_box()
+            if not box:
+                self.logger.error("未找到发布按钮")
+                return False
+
+            # xhs-publish-btn 使用 closed shadow DOM，无法定位内部 button。
+            # shadow 内两个 120px 按钮居中排列，gap 24px；发布按钮中心在宿主中心右侧 72px。
+            x = box["x"] + box["width"] * 0.5 + 72
+            y = box["y"] + box["height"] * 0.5
+            await page.mouse.click(x, y)
+
+            try:
+                await page.wait_for_url(
+                    re.compile(r"/success|published=true"), timeout=30000
+                )
+            except Error:
+                current = page.url
+                if not re.search(r"/success|published=true", current):
+                    self.logger.error("点击发布宿主后 URL 未匹配", url=current)
+                    return False
+            return True
+        except Exception as e:
+            self.logger.error("点击小红书发布宿主失败", reason=str(e)[:200])
             return False
