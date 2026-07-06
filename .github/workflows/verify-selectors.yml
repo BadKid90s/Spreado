@@ -95,17 +95,20 @@ jobs:
           path: |
             reports/selector-check-*.md
             reports/e2e-check-*.md
-          retention-days: 30
+          retention-days: 3
 
       - name: Commit report
         if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # 清理旧归档，只保留最近 10 个（按时间戳排序）
+          # 清理旧归档，只保留最近 3 天
           cd reports
+          cutoff=$(date -u -d '3 days ago' +%Y%m%dT%H%M%S)
           for prefix in selector-check e2e-check; do
-            archived=$(ls -1 ${prefix}-????????T??????.md 2>/dev/null | sort -r | tail -n +11)
+            archived=$(find . -maxdepth 1 -type f -name "${prefix}-????????T??????.md" \
+              | sed 's#^\./##' \
+              | awk -F'[-.]' -v cutoff="$cutoff" '$3 < cutoff')
             if [ -n "$archived" ]; then
               echo "清理旧报告: $archived"
               echo "$archived" | xargs rm -f
