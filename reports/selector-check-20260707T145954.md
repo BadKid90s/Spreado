@@ -1,0 +1,73 @@
+# 平台元素健康度报告
+
+- 生成时间: `2026-07-07T14:59:54+08:00`
+- 平台总数: 4
+
+## 状态汇总
+
+| 平台 | 状态 | 登录页 | login_selectors | publish 页 | authed_selectors |
+|---|---|---|---|---|---|
+| 抖音 (`douyin`) | **OK** | ✓ | 1/4 | ✓ | 1/4 |
+| 小红书 (`xiaohongshu`) | **AUTHED_BROKEN** | ✓ | 2/4 | ✓ | 0/2 |
+| 快手 (`kuaishou`) | **AUTHED_BROKEN** | ✓ | 2/4 | ✓ | 0/2 |
+| 视频号 (`shipinhao`) | **AUTHED_BROKEN** | ✓ | 3/4 | ✓ | 0/2 |
+
+## 详细结果
+
+### 抖音 (`douyin`) — OK
+
+**登录页** `https://creator.douyin.com/` — reachable=True
+  - ✗ `text="手机号登录"` (found=False, visible=False)
+  - ✓ `text="扫码登录"`
+  - ✗ `text="登录"` (found=False, visible=False)
+  - ✗ `.login-btn` (found=False, visible=False)
+
+**publish 页** `https://creator.douyin.com/creator-micro/content/upload` — reachable=True
+  - ✓ `div[class^='container']`
+  - ✗ `div[class*='upload']` (found=False, visible=False)
+  - ✗ `input[placeholder*='作品标题']` (found=False, visible=False)
+  - ✗ `div.semi-upload` (found=False, visible=False)
+
+### 小红书 (`xiaohongshu`) — AUTHED_BROKEN
+
+**登录页** `https://creator.xiaohongshu.com/` — reachable=True
+  - ✓ `text="短信登录"`
+  - ✗ `text="扫码登录"` (found=False, visible=False)
+  - ✓ `button:has-text("登")`
+  - ✗ `.login-btn` (found=False, visible=False)
+
+**publish 页** `https://creator.xiaohongshu.com/publish/publish` — reachable=True
+  - ✗ `input.upload-input` (found=False, visible=False)
+  - ✗ `button:has-text("上传视频")` (found=False, visible=False)
+
+### 快手 (`kuaishou`) — AUTHED_BROKEN
+
+**登录页** `https://passport.kuaishou.com/pc/account/login` — reachable=True
+  - ✗ `text="立即登录"` (found=False, visible=False)
+  - ✓ `.platform-switch-tips`
+  - ✓ `button.pl-btn.pl-btn-primary`
+  - ✗ `.login-btn` (found=False, visible=False)
+
+**publish 页** `https://cp.kuaishou.com/article/publish/video` — reachable=True
+  - ✗ `#work-description-edit` (found=False, visible=False)
+  - ✗ `text="发布作品"` (found=False, visible=False)
+
+### 视频号 (`shipinhao`) — AUTHED_BROKEN
+
+**登录页** `https://channels.weixin.qq.com/login.html` — reachable=True
+  - ✓ `.login-view`
+  - ✓ `.login-content`
+  - ✓ `iframe.display`
+  - ✗ `link:has-text("视频号助手")` (found=False, visible=False)
+
+**publish 页** `https://channels.weixin.qq.com/platform/post/create` — reachable=True
+  - ✗ `div.input-editor` (found=False, visible=False)
+  - ✗ `button:has-text("发表")` (found=False, visible=False)
+
+## 状态说明
+
+- **OK**: 登录页 + publish 页选择器全通过
+- **PARTIAL**: 登录页通过，publish 页因无 cookie 未验证
+- **BROKEN**: 登录页选择器全部失效（**需立即修复**）
+- **AUTHED_BROKEN**: cookie 有效但 publish 页选择器失效
+- **UNREACHABLE**: 登录页无法访问（可能是 GitHub Actions 出口 IP 被封）
