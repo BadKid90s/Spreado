@@ -281,8 +281,8 @@ class StealthBrowser:
             raise RuntimeError("Context 未初始化")
         return await self.context.new_page()
 
-    async def load_cookies_from_file(self, file_path: str | Path) -> None:
-        """Load a Playwright storage-state file or plain cookie list."""
+    async def load_storage_state_from_file(self, file_path: str | Path) -> None:
+        """Restore cookies and local storage from a Playwright state file."""
         if self.context is None:
             raise RuntimeError("Context 未初始化")
 
@@ -298,17 +298,42 @@ class StealthBrowser:
                 f"[错误] 读取 Cookie 文件失败: {path}，错误: {exc}"
             ) from exc
 
-        if isinstance(data, dict) and "cookies" in data:
-            raw_cookies = data["cookies"]
+        if isinstance(data, dict):
+            raw_cookies = data.get("cookies", [])
+            raw_origins = data.get("origins", [])
         else:
             raw_cookies = data
+            raw_origins = []
         if not isinstance(raw_cookies, list):
             raise RuntimeError(
                 f"[错误] Cookie 文件格式不正确，应为列表或包含 'cookies' 字段: {path}"
             )
-        if not raw_cookies:
-            raise RuntimeError(f"[提示] Cookie 文件为空: {path}")
-        await self.context.add_cookies(raw_cookies)
+        if not isinstance(raw_origins, list):
+            raise RuntimeError(f"[错误] origins 字段格式不正确: {path}")
+        if not raw_cookies and not raw_origins:
+            raise RuntimeError(f"[提示] 认证状态文件为空: {path}")
+        if raw_cookies:
+            await self.context.add_cookies(raw_cookies)
+
+        local_storage = {
+            origin["origin"]: origin.get("localStorage", [])
+            for origin in raw_origins
+            if isinstance(origin, dict) and origin.get("origin")
+        }
+        if local_storage:
+            serialized_state = json.dumps(local_storage, ensure_ascii=True)
+            await self.context.add_init_script(f"""
+                (() => {{
+                    const state = {serialized_state};
+                    for (const item of state[window.location.origin] || []) {{
+                        window.localStorage.setItem(item.name, item.value);
+                    }}
+                }})();
+                """)
+
+    async def load_cookies_from_file(self, file_path: str | Path) -> None:
+        """Compatibility alias for restoring a complete storage-state file."""
+        await self.load_storage_state_from_file(file_path)
 
     async def storage_state(self, path: Path | str, *, secure_directory: bool = False):
         """Save cookies and restrict their POSIX filesystem permissions."""
@@ -328,28 +353,30 @@ class StealthBrowser:
         await self.__aexit__(None, None, None)
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if self.browser:
+        owned_process = self._browser_process
+        if self.browser and owned_process:
             try:
                 cdp_session = await self.browser.new_browser_cdp_session()
                 await cdp_session.send("Browser.close")
             except Exception:
                 pass
+        if owned_process and owned_process.poll() is None:
             try:
-                await self.browser.close()
-            except Exception:
-                pass
-            self.browser = None
+                await asyncio.to_thread(owned_process.wait, timeout=5)
+            except subprocess.TimeoutExpired:
+                owned_process.terminate()
+                try:
+                    await asyncio.to_thread(owned_process.wait, timeout=5)
+                except subprocess.TimeoutExpired:
+                    owned_process.kill()
+                    await asyncio.to_thread(owned_process.wait, timeout=5)
+
+        # Stopping Playwright disconnects from an externally owned CDP browser.
+        # Do not send Browser.close when this instance only attached to it.
+        self.browser = None
         self.context = None
         if self.playwright:
             await self.playwright.stop()
             self.playwright = None
-        if self._browser_process:
-            if self._browser_process.poll() is None:
-                self._browser_process.terminate()
-                try:
-                    await asyncio.to_thread(self._browser_process.wait, timeout=5)
-                except subprocess.TimeoutExpired:
-                    self._browser_process.kill()
-                    await asyncio.to_thread(self._browser_process.wait, timeout=5)
-            self._browser_process = None
+        self._browser_process = None
         self._cdp_endpoint = None

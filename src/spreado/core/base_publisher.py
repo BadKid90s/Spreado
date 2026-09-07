@@ -10,7 +10,7 @@
 from abc import abstractmethod
 from typing import List
 
-from .uploader import BaseUploader
+from .base_uploader import BaseUploader
 from ..models.task import Task
 
 
