@@ -36,6 +36,12 @@ class DouYinUploader(BasePublisher):
             "input[placeholder*='作品标题']",
             "div.semi-upload",
         ),
+        login_url_patterns=(r"/login(?:[/?#]|$)", r"passport"),
+        challenge_selectors=(
+            ".captcha_verify_container",
+            ".secsdk-captcha-drag-icon",
+            'text="请完成下列验证"',
+        ),
     )
 
     async def _upload_video(

@@ -32,6 +32,12 @@ class KuaiShouUploader(BasePublisher):
             ".login-btn",
         ),
         authenticated_selectors=("#work-description-edit", 'text="发布作品"'),
+        login_url_patterns=(r"passport\.kuaishou\.com/pc/account/login",),
+        challenge_selectors=(
+            ".captcha",
+            ".geetest_panel",
+            'text="安全验证"',
+        ),
     )
 
     async def _dismiss_overlays(self, page: Page) -> None:

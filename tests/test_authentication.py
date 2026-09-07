@@ -6,6 +6,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from spreado.core.authentication import (
+    AuthResult,
+    AuthStatus,
     AuthenticationConfig,
     AuthenticationManager,
     AuthenticationStateStore,
@@ -43,22 +45,26 @@ class _Logger:
 
 
 class _Locator:
+    def __init__(self, visible=False):
+        self.visible = visible
+
     @property
     def first(self):
         return self
 
     async def count(self):
-        return 0
+        return int(self.visible)
 
     async def is_visible(self):
-        return False
+        return self.visible
 
 
 class _Page:
-    def __init__(self):
+    def __init__(self, visible_selectors=()):
         self.url = "about:blank"
         self.visited = []
         self.closed = False
+        self.visible_selectors = set(visible_selectors)
 
     async def goto(self, url, **kwargs):
         self.url = url
@@ -71,7 +77,7 @@ class _Page:
         raise AssertionError("No authenticated selector is configured")
 
     def locator(self, selector):
-        return _Locator()
+        return _Locator(selector in self.visible_selectors)
 
     async def close(self):
         self.closed = True
@@ -210,12 +216,14 @@ class AuthenticationTests(unittest.TestCase):
                     login_url="https://passport.example/login",
                     verification_url="https://creator.example/publish",
                     login_selectors=(),
+                    authenticated_selectors=(".authenticated",),
                 ),
                 _Logger(),
                 platform_name="test",
                 state_store=AuthenticationStateStore(state_path, _Logger()),
                 browser_factory=factory,
             )
+            browser.page.visible_selectors.add(".authenticated")
 
             self.assertTrue(asyncio.run(manager.login()))
             self.assertEqual(browser.page.visited, ["https://creator.example/publish"])
@@ -228,6 +236,7 @@ class AuthenticationTests(unittest.TestCase):
                 login_url="https://passport.example/login",
                 verification_url="https://creator.example/publish",
                 login_selectors=(),
+                authenticated_selectors=(".authenticated",),
             )
 
             @property
@@ -261,6 +270,82 @@ class AuthenticationTests(unittest.TestCase):
         self.assertTrue(result)
         self.assertEqual(authentication.calls, 1)
         self.assertIs(publisher.upload_page, authentication.page)
+
+    def test_authentication_detection_returns_explicit_states(self):
+        state_path = Path("unused.json")
+        manager = AuthenticationManager(
+            AuthenticationConfig(
+                login_url="https://passport.example/login",
+                verification_url="https://creator.example/publish",
+                login_selectors=(".login",),
+                authenticated_selectors=(".authenticated",),
+                login_url_patterns=(r"passport\.example/login",),
+                challenge_selectors=(".challenge",),
+            ),
+            _Logger(),
+            platform_name="test",
+            state_store=AuthenticationStateStore(state_path, _Logger()),
+        )
+
+        async def detect(page):
+            return await manager._detect_auth_state(page)
+
+        authenticated = _Page((".authenticated",))
+        authenticated.url = "https://creator.example/publish"
+        self.assertEqual(
+            asyncio.run(detect(authenticated)).status, AuthStatus.AUTHENTICATED
+        )
+
+        login = _Page((".login",))
+        login.url = "https://passport.example/login"
+        self.assertEqual(asyncio.run(detect(login)).status, AuthStatus.UNAUTHENTICATED)
+
+        login_by_url = _Page()
+        login_by_url.url = "https://passport.example/login?next=publish"
+        result = asyncio.run(detect(login_by_url))
+        self.assertEqual(result.status, AuthStatus.UNAUTHENTICATED)
+        self.assertEqual(result.evidence, "login_url")
+
+        challenge = _Page((".challenge", ".login"))
+        challenge.url = "https://passport.example/login"
+        self.assertEqual(asyncio.run(detect(challenge)).status, AuthStatus.CHALLENGE)
+
+        unknown = _Page()
+        unknown.url = "https://creator.example/publish"
+        result = asyncio.run(detect(unknown))
+        self.assertEqual(result.status, AuthStatus.UNKNOWN)
+        self.assertEqual(result.evidence, "no_conclusive_evidence")
+
+    def test_authentication_state_requires_two_stable_observations(self):
+        manager = AuthenticationManager(
+            AuthenticationConfig(
+                login_url="https://passport.example/login",
+                verification_url="https://creator.example/publish",
+                login_selectors=(".login",),
+                authenticated_selectors=(".authenticated",),
+            ),
+            _Logger(),
+            platform_name="test",
+            state_store=AuthenticationStateStore(Path("unused.json"), _Logger()),
+        )
+        page = _Page()
+        page.url = "https://creator.example/publish"
+        states = iter(
+            (
+                AuthStatus.AUTHENTICATED,
+                AuthStatus.UNKNOWN,
+                AuthStatus.AUTHENTICATED,
+                AuthStatus.AUTHENTICATED,
+            )
+        )
+
+        async def detect(_page):
+            status = next(states)
+            return AuthResult(status, "test", page.url)
+
+        manager._detect_auth_state = detect
+        result = asyncio.run(manager._wait_for_auth_state(page, timeout=3.0))
+        self.assertEqual(result.status, AuthStatus.AUTHENTICATED)
 
     def test_browser_restores_cookies_and_local_storage(self):
         with tempfile.TemporaryDirectory() as temp_dir:

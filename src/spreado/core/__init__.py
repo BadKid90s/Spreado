@@ -5,6 +5,8 @@
 """
 
 from spreado.core.authentication import (
+    AuthResult,
+    AuthStatus,
     AuthenticationConfig,
     AuthenticationError,
     AuthenticationManager,
@@ -14,6 +16,8 @@ from spreado.core.base_publisher import BasePublisher
 from spreado.core.browser import StealthBrowser
 
 __all__ = [
+    "AuthResult",
+    "AuthStatus",
     "AuthenticationConfig",
     "AuthenticationError",
     "AuthenticationManager",

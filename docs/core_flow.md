@@ -21,8 +21,12 @@ authentication_config = AuthenticationConfig(
     verification_url="https://creator.example.com/publish",
     login_selectors=(".login-form",),
     authenticated_selectors=(".publish-editor",),
+    login_url_patterns=(r"/login(?:[/?#]|$)",),
+    challenge_selectors=(".captcha",),
 )
 ```
+
+认证判断返回 `AUTHENTICATED`、`UNAUTHENTICATED`、`CHALLENGE` 或 `UNKNOWN`。只有连续两次检测到 `AUTHENTICATED` 才允许进入发布流程；同域名和“暂未发现登录框”不再被当作成功证据。
 
 ## 发布流程
 

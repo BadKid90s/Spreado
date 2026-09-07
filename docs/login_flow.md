@@ -23,6 +23,9 @@ AuthenticationConfig(
     verification_url="...",
     login_selectors=(...),
     authenticated_selectors=(...),
+    login_url_patterns=(...),
+    challenge_selectors=(...),
+    probe=None,
     browser_channel=None,
 )
 ```
@@ -31,17 +34,34 @@ AuthenticationConfig(
 - `verification_url`：用于确认认证状态的页面，通常也是发布入口。
 - `login_selectors`：出现任意一个即表示仍需登录。
 - `authenticated_selectors`：出现任意一个即表示已经登录。
+- `login_url_patterns`：当前 URL 命中任意正则时表示仍需登录。
+- `challenge_selectors`：出现验证码或安全验证元素时表示认证被拦截。
+- `probe`：可选的平台专用异步探针，用于补充 DOM 无法覆盖的判定。
 - `browser_channel`：可选的系统浏览器类型。
+
+## 认证结果
+
+认证检查返回 `AuthResult`，而不是含义模糊的布尔值：
+
+| 状态 | 含义 |
+|---|---|
+| `AUTHENTICATED` | 有明确的已登录证据 |
+| `UNAUTHENTICATED` | 登录页面、登录表单或登录 URL 已出现 |
+| `CHALLENGE` | 出现验证码或安全验证，不能视为已登录 |
+| `UNKNOWN` | 当前证据不足，保守拒绝继续发布 |
 
 ## 验证顺序
 
 `AuthenticationManager` 打开验证页后按以下顺序判断：
 
-1. 登录后元素可见，认证有效。
-2. 登录元素可见，认证无效。
-3. 页面仍停留在验证域名且没有登录元素，认证有效。
-4. 未配置登录后元素且没有登录元素，使用兼容性兜底。
-5. 其他状态保守判定为无效。
+1. 安全验证元素可见，返回 `CHALLENGE`。
+2. 登录元素可见，返回 `UNAUTHENTICATED`。
+3. 当前 URL 命中登录页规则，返回 `UNAUTHENTICATED`。
+4. 平台探针给出明确结果时采用探针结果。
+5. 登录后元素可见，返回 `AUTHENTICATED`。
+6. 没有确切证据时返回 `UNKNOWN`。
+
+为避免页面跳转和组件短暂闪现造成误判，同一个明确状态必须连续出现两次才会被接受。超时后统一返回 `UNKNOWN`。验证域名相同、登录元素暂未出现或 Cookie 文件未过期，都不再单独作为登录成功依据。
 
 ## 公开流程
 

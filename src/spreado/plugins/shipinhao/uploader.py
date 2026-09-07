@@ -66,6 +66,12 @@ class ShiPinHaoUploader(BasePublisher):
             'link:has-text("视频号助手")',
         ),
         authenticated_selectors=("div.input-editor", 'button:has-text("发表")'),
+        login_url_patterns=(r"/login\.html(?:[?#]|$)",),
+        challenge_selectors=(
+            ".tcaptcha-transform",
+            'iframe[src*="captcha"]',
+            'text="安全验证"',
+        ),
     )
 
     # ---------------------------------------------------------------- shadow DOM helpers

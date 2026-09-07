@@ -38,6 +38,12 @@ class XiaoHongShuUploader(BasePublisher):
             "input.upload-input",
             'button:has-text("上传视频")',
         ),
+        login_url_patterns=(r"/login(?:[/?#]|$)",),
+        challenge_selectors=(
+            ".captcha",
+            ".geetest_panel",
+            'text="安全验证"',
+        ),
     )
 
     @property

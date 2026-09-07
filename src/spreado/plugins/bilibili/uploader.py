@@ -41,6 +41,13 @@ class BilibiliUploader(BasePublisher):
             'text="短信登录"',
             ".login-btn",
         ),
+        authenticated_selectors=(
+            'input[type="file"]',
+            ".bcc-upload-wrapper",
+            ".upload-btn",
+        ),
+        login_url_patterns=(r"passport\.bilibili\.com/login",),
+        challenge_selectors=(".geetest_panel", 'text="安全验证"'),
     )
 
     async def _upload_video(

@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import re
 import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import AsyncIterator, Awaitable, Callable
-from urllib.parse import urlparse
 
 from playwright.async_api import Error, Page
 
@@ -21,12 +23,32 @@ class AuthenticationError(RuntimeError):
     """Raised when a browser session cannot be authenticated."""
 
 
+class AuthStatus(str, Enum):
+    AUTHENTICATED = "authenticated"
+    UNAUTHENTICATED = "unauthenticated"
+    CHALLENGE = "challenge"
+    UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True)
+class AuthResult:
+    status: AuthStatus
+    evidence: str
+    url: str
+
+
+AuthProbe = Callable[[Page], Awaitable[AuthResult | None]]
+
+
 @dataclass(frozen=True)
 class AuthenticationConfig:
     login_url: str
     verification_url: str
     login_selectors: tuple[str, ...]
     authenticated_selectors: tuple[str, ...] = ()
+    login_url_patterns: tuple[str, ...] = ()
+    challenge_selectors: tuple[str, ...] = ()
+    probe: AuthProbe | None = None
     browser_channel: BrowserChannel = None
 
 
@@ -122,7 +144,8 @@ class AuthenticationManager:
                     await self.state.restore(browser)
                     page = await browser.new_page()
                     try:
-                        if await self._open_verification_page(page):
+                        result = await self._open_verification_page(page)
+                        if result.status is AuthStatus.AUTHENTICATED:
                             self.logger.info("已有登录状态可用")
                         else:
                             await self._interactive_login(page)
@@ -144,7 +167,8 @@ class AuthenticationManager:
                     await self.state.restore(browser)
                     page = await browser.new_page()
                     try:
-                        authenticated = await self._open_verification_page(page)
+                        result = await self._open_verification_page(page)
+                        authenticated = result.status is AuthStatus.AUTHENTICATED
                         if authenticated:
                             await self.state.save(browser)
                         return authenticated
@@ -171,9 +195,12 @@ class AuthenticationManager:
             await self.state.restore(browser)
             page = await browser.new_page()
             try:
-                if not await self._open_verification_page(page):
+                result = await self._open_verification_page(page)
+                if result.status is not AuthStatus.AUTHENTICATED:
                     if not auto_login:
-                        raise AuthenticationError("认证状态无效")
+                        raise AuthenticationError(
+                            f"认证状态不可用: {result.status.value} ({result.evidence})"
+                        )
                     await self._interactive_login(page)
                 await self.state.save(browser)
                 yield page
@@ -185,39 +212,82 @@ class AuthenticationManager:
         self.logger.info("等待用户在浏览器内完成登录…")
         if not await self._wait_for_login(page, timeout=120.0):
             raise AuthenticationError("登录超时")
-        if not await self._open_verification_page(page):
+        result = await self._open_verification_page(page)
+        if result.status is not AuthStatus.AUTHENTICATED:
             raise AuthenticationError(
-                f"登录完成，但验证页 {self.config.verification_url} 仍要求登录"
+                "登录完成但验证未通过: " f"{result.status.value} ({result.evidence})"
             )
 
-    async def _open_verification_page(self, page: Page) -> bool:
+    async def _open_verification_page(self, page: Page) -> AuthResult:
         await page.goto(self.config.verification_url, timeout=30000)
-        await page.wait_for_timeout(3000)
-        return await self._is_authenticated(page, wait_for_positive=True)
+        return await self._wait_for_auth_state(page, timeout=10.0)
 
-    async def _is_authenticated(
-        self, page: Page, *, wait_for_positive: bool = False
-    ) -> bool:
-        authed = await self._check_authed(
-            page, timeout=8000 if wait_for_positive else 0
+    async def _detect_auth_state(self, page: Page) -> AuthResult:
+        if await self._matches_any(page, self.config.challenge_selectors):
+            return AuthResult(AuthStatus.CHALLENGE, "challenge_dom", page.url)
+
+        if await self._matches_any(page, self.config.login_selectors):
+            return AuthResult(AuthStatus.UNAUTHENTICATED, "login_dom", page.url)
+
+        if self._matches_login_url(page.url):
+            return AuthResult(AuthStatus.UNAUTHENTICATED, "login_url", page.url)
+
+        if self.config.probe:
+            try:
+                result = await self.config.probe(page)
+                if result is not None:
+                    return result
+            except Exception as exc:
+                self.logger.debug("认证探针异常", reason=str(exc)[:100])
+
+        if await self._matches_any(page, self.config.authenticated_selectors):
+            return AuthResult(AuthStatus.AUTHENTICATED, "authenticated_dom", page.url)
+
+        return AuthResult(AuthStatus.UNKNOWN, "no_conclusive_evidence", page.url)
+
+    async def _wait_for_auth_state(self, page: Page, *, timeout: float) -> AuthResult:
+        deadline = time.monotonic() + timeout
+        previous: AuthResult | None = None
+        stable_count = 0
+        last = AuthResult(AuthStatus.UNKNOWN, "page_not_ready", page.url)
+
+        while time.monotonic() < deadline:
+            last = await self._detect_auth_state(page)
+            if last.status is AuthStatus.UNKNOWN:
+                previous = None
+                stable_count = 0
+            elif previous and previous.status is last.status:
+                stable_count += 1
+            else:
+                previous = last
+                stable_count = 1
+
+            if stable_count >= 2:
+                self._log_auth_result(last)
+                return last
+            await asyncio.sleep(0.5)
+
+        unknown = AuthResult(AuthStatus.UNKNOWN, last.evidence, page.url)
+        self._log_auth_result(unknown)
+        return unknown
+
+    def _matches_login_url(self, url: str) -> bool:
+        return any(
+            re.search(pattern, url) for pattern in self.config.login_url_patterns
         )
-        if authed:
-            self.logger.info("认证有效", method="authed_dom")
-            return True
-        if await self._check_login_required(page):
-            self.logger.warning("认证无效", method="login_dom")
-            return False
 
-        verification_domain = urlparse(self.config.verification_url).netloc
-        current_domain = urlparse(page.url).netloc
-        if verification_domain and current_domain == verification_domain:
-            self.logger.info("认证有效", method="same_domain", url=page.url)
-            return True
-        if not self.config.authenticated_selectors:
-            self.logger.info("认证有效", method="no_login_dom")
-            return True
-        self.logger.warning("认证状态不明，视为无效", url=page.url)
-        return False
+    def _log_auth_result(self, result: AuthResult) -> None:
+        fields = {
+            "status": result.status.value,
+            "evidence": result.evidence,
+            "url": result.url,
+        }
+        if result.status is AuthStatus.AUTHENTICATED:
+            self.logger.info("认证有效", **fields)
+        elif result.status is AuthStatus.UNKNOWN:
+            self.logger.warning("认证状态未知", **fields)
+        else:
+            self.logger.warning("认证未通过", **fields)
 
     async def _wait_for_login(self, page: Page, *, timeout: float) -> bool:
         await page.wait_for_timeout(3000)
@@ -227,9 +297,10 @@ class AuthenticationManager:
             nonlocal no_login_since
             if page.url.startswith(("chrome-error://", "edge://")):
                 return False
-            if await self._check_authed(page, timeout=0):
+            result = await self._detect_auth_state(page)
+            if result.status is AuthStatus.AUTHENTICATED:
                 return True
-            if await self._check_login_required(page):
+            if result.status in (AuthStatus.UNAUTHENTICATED, AuthStatus.CHALLENGE):
                 no_login_since = 0.0
                 return False
 
@@ -242,7 +313,8 @@ class AuthenticationManager:
                 return False
 
             try:
-                return await self._open_verification_page(page)
+                result = await self._open_verification_page(page)
+                return result.status is AuthStatus.AUTHENTICATED
             except Exception:
                 no_login_since = 0.0
                 return False
@@ -251,29 +323,9 @@ class AuthenticationManager:
             check, timeout=timeout, interval=2.0, desc="login"
         )
 
-    async def _check_login_required(self, page: Page) -> bool:
-        for selector in self.config.login_selectors:
+    async def _matches_any(self, page: Page, selectors: tuple[str, ...]) -> bool:
+        for selector in selectors:
             try:
-                element = page.locator(selector)
-                if await element.count() > 0 and await element.first.is_visible():
-                    return True
-            except Error:
-                continue
-        return False
-
-    async def _check_authed(self, page: Page, *, timeout: int) -> bool:
-        if not self.config.authenticated_selectors:
-            return False
-        per_selector = max(
-            1000, timeout // max(1, len(self.config.authenticated_selectors))
-        )
-        for selector in self.config.authenticated_selectors:
-            try:
-                if timeout:
-                    await page.wait_for_selector(
-                        selector, state="visible", timeout=per_selector
-                    )
-                    return True
                 element = page.locator(selector)
                 if await element.count() > 0 and await element.first.is_visible():
                     return True
