@@ -13,6 +13,8 @@ from playwright.async_api import (
 )
 from playwright_stealth import Stealth
 
+from ..utils.permissions import ensure_private_directory, restrict_private_file
+
 # 支持的浏览器通道
 BrowserChannel = Literal["chrome", "msedge", "chromium", None]
 
@@ -232,13 +234,19 @@ class StealthBrowser:
 
         await self.context.add_cookies(cookies)
 
-    async def storage_state(self, path: Path | str):
-        """保存当前 Cookie 到文件"""
+    async def storage_state(self, path: Path | str, *, secure_directory: bool = False):
+        """保存当前 Cookie，并在 POSIX 上限制文件访问权限。"""
         if not self.context:
             raise RuntimeError("Context 未初始化")
-        # 确保存储目录存在
-        Path(path).parent.mkdir(parents=True, exist_ok=True)
-        return await self.context.storage_state(path=path)
+        target = Path(path)
+        if secure_directory:
+            ensure_private_directory(target.parent)
+        else:
+            target.parent.mkdir(parents=True, exist_ok=True)
+
+        state = await self.context.storage_state(path=target)
+        restrict_private_file(target)
+        return state
 
     async def close(self):
         await self.__aexit__(None, None, None)

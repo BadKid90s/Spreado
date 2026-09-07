@@ -64,7 +64,7 @@ Spreado/
 
 ### 系统要求
 
-- Python 3.9 或更高版本（推荐 3.10+）
+- Python 3.10 或更高版本
 - 操作系统：Windows、macOS、Linux
 - 浏览器：Chromium（通过 Playwright 安装）
 

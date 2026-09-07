@@ -41,6 +41,7 @@ class BaseUploader(ABC):
         headless: bool = True,
     ):
         self.logger = logger or get_uploader_logger(self.platform_name)
+        self._uses_managed_cookie_directory = cookie_file_path is None
         if cookie_file_path is None:
             self.cookie_file_path = (
                 COOKIES_DIR / f"{self.platform_name}_uploader" / "account.json"
@@ -126,8 +127,10 @@ class BaseUploader(ABC):
                             f"登录检测通过但 cookie 无效：发布页 {self.publish_url} 仍要求登录"
                         )
                     # 发布页 cookie 已设置，现在保存完整的 storage_state
-                    self.cookie_file_path.parent.mkdir(parents=True, exist_ok=True)
-                    await page.context.storage_state(path=self.cookie_file_path)
+                    await browser.storage_state(
+                        self.cookie_file_path,
+                        secure_directory=self._uses_managed_cookie_directory,
+                    )
                     self.logger.info("cookie 已保存", path=str(self.cookie_file_path))
                     self.logger.info("cookie 验证通过", publish_url=self.publish_url)
                     return True
@@ -276,8 +279,10 @@ class BaseUploader(ABC):
                     if not await self._wait_for_login(page, timeout=120.0):
                         raise RuntimeError("登录超时")
                     # 保存 cookie 供后续使用
-                    self.cookie_file_path.parent.mkdir(parents=True, exist_ok=True)
-                    await page.context.storage_state(path=self.cookie_file_path)
+                    await browser.storage_state(
+                        self.cookie_file_path,
+                        secure_directory=self._uses_managed_cookie_directory,
+                    )
                     self.logger.info("cookie 已保存", path=str(self.cookie_file_path))
                     # 2) 导航到发布页并上传
                     await page.goto(self.publish_url)
