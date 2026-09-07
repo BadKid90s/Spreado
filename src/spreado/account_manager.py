@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 
 from .conf import COOKIES_DIR
+from .utils.permissions import ensure_private_directory, restrict_private_file
 
 logger = logging.getLogger("spreado.account_manager")
 
@@ -184,10 +185,11 @@ class AccountManager:
                 old_cookie = old_dir / "account.json"
                 if old_cookie.exists():
                     new_dir = self.get_account_dir(platform, "default")
-                    new_dir.mkdir(parents=True, exist_ok=True)
+                    ensure_private_directory(new_dir)
                     new_cookie = new_dir / "account.json"
                     if not new_cookie.exists():
                         old_cookie.rename(new_cookie)
+                        restrict_private_file(new_cookie)
                         migrated += 1
                         logger.info(
                             f"迁移 Cookie: {old_dir.name} -> {platform}/default"

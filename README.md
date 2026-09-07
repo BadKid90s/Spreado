@@ -29,7 +29,7 @@
 
 ## 📋 系统要求
 
-- Python **3.9** 或更高版本（推荐 3.10+）
+- Python **3.10** 或更高版本
 - 操作系统：Windows, macOS, Linux
 - 浏览器：自动检测系统已安装的 Chrome/Edge，或使用 Playwright Chromium
 
