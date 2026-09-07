@@ -18,7 +18,7 @@ __logo__ = r"""
 
 from spreado.core.base_publisher import BasePublisher
 from spreado.plugin_loader import PluginLoader, get_plugin_loader
-from spreado.account_manager import AccountManager
+from spreado.account_manager import AccountContext, AccountManager
 from spreado.models.task import Task
 
 __all__ = [
@@ -26,6 +26,7 @@ __all__ = [
     "PluginLoader",
     "get_plugin_loader",
     "AccountManager",
+    "AccountContext",
     "Task",
     "__version__",
     "__logo__",

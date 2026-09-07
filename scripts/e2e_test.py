@@ -29,6 +29,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from playwright.async_api import Error  # noqa: E402
 
+from spreado.account_manager import AccountManager  # noqa: E402
 from spreado.plugin_loader import get_plugin_loader  # noqa: E402
 from spreado.utils.log import StepLogger  # noqa: E402
 
@@ -191,11 +192,15 @@ async def _test_platform(
     title: str,
     content: str,
     tags: List[str],
+    account_id: str,
 ) -> PlatformResult:
     loader = get_plugin_loader()
     cls = loader.get_publisher_class(name)
-    cookie_path = cookies_dir / f"{name}_uploader" / "account.json"
-    inst = cls(cookie_file_path=cookie_path)
+    inst = cls(
+        account_id=account_id,
+        account_manager=AccountManager(base_dir=cookies_dir),
+    )
+    cookie_path = inst.cookie_file_path
     display_name = getattr(inst, "display_name", name)
 
     result = PlatformResult(name=name, display_name=display_name)
@@ -344,6 +349,7 @@ async def main() -> int:
     parser.add_argument("--cover", type=Path, default=None, help="测试封面路径")
     parser.add_argument("--no-cover", action="store_true", help="不测试封面")
     parser.add_argument("--headed", action="store_true", help="有头模式")
+    parser.add_argument("--account", default="default", help="账号 ID")
     parser.add_argument("--title", default="E2E 测试标题", help="测试标题")
     parser.add_argument(
         "--content", default="E2E 测试正文内容 #测试标签", help="测试正文"
@@ -388,6 +394,7 @@ async def main() -> int:
                 title=args.title,
                 content=args.content,
                 tags=args.tags,
+                account_id=args.account,
             )
         except Exception as e:
             print(f"[e2e] {n} 异常: {e}", flush=True)

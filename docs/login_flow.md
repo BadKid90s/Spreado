@@ -11,7 +11,9 @@
 | 浏览器 profile | 浏览器原生 Cookie、站点存储和设备状态，是主要状态来源 |
 | `account.json` | Playwright storage state 备份，用于恢复 Session Cookie 和 LocalStorage |
 
-默认浏览器 profile 在 Windows 上位于 `%LOCALAPPDATA%\Spreado\browser-profile`。`account.json` 默认写入当前运行目录下的 `cookies/{platform}_uploader/`。
+每个 `(platform, account_id)` 都有独立状态：`account.json` 默认位于 `cookies/{platform}/{account_id}/`，浏览器 profile 在 Windows 上默认位于 `%LOCALAPPDATA%\Spreado\browser-profiles\{platform}\{account_id}`。不同账号不会连接到同一个 CDP 上下文。
+
+默认账号会在新路径不存在时继续读取旧版 `cookies/{platform}_uploader/account.json`，不会擅自移动文件。也可以调用 `AccountManager.migrate_legacy_cookies()` 显式迁移。
 
 ## AuthenticationConfig
 
@@ -76,6 +78,18 @@ AuthenticationConfig(
 ### upload_video_flow
 
 通过 `AuthenticationManager.authenticated_page()` 获得已认证页面。恢复、验证、可选登录和实际发布始终发生在同一个浏览器会话中。
+
+## 多账号
+
+CLI 的登录、验证和上传命令都接受 `--account`：
+
+```bash
+spreado login kuaishou --account store-a
+spreado verify kuaishou --account store-a
+spreado upload kuaishou --account store-a --video video.mp4
+```
+
+同一个账号的登录、验证和发布会话由跨进程文件锁串行保护；账号已被占用时，新任务会立即失败并记录明确原因。不同账号使用不同 profile 和锁，可以并行运行。账号 ID 和平台名会经过路径校验，不能包含路径分隔符或 `..`。
 
 ## 状态文件格式
 

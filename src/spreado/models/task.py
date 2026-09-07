@@ -20,6 +20,7 @@ class Task:
     # --- 基本信息 ---
     type: str = "video"  # "video" 或 "image_text"
     platform: str = ""  # 目标平台名 (如 "douyin", "xiaohongshu")
+    account_id: str = "default"  # 平台账号 ID
     title: str = ""  # 标题
     content: str = ""  # 描述/正文
     tags: List[str] = field(default_factory=list)  # 标签列表

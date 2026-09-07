@@ -47,11 +47,19 @@ def _get_platform_choices(include_all: bool = False) -> List[str]:
     return names
 
 
-def get_publisher(platform: str, cookies: str = None, headless: bool = True):
+def get_publisher(
+    platform: str,
+    cookies: str = None,
+    headless: bool = True,
+    account_id: str = "default",
+):
     """获取发布器实例"""
     loader = get_plugin_loader()
     publisher = loader.get_publisher(
-        platform, cookie_file_path=cookies, headless=headless
+        platform,
+        cookie_file_path=cookies,
+        headless=headless,
+        account_id=account_id,
     )
     if not publisher:
         raise ValueError(f"不支持的平台: {platform}")
@@ -65,7 +73,9 @@ async def login_single_platform(platform: str, args, logger) -> bool:
     logger.info(f"登录平台: {platform_name}")
 
     try:
-        publisher = get_publisher(platform=platform, cookies=args.cookies)
+        publisher = get_publisher(
+            platform=platform, cookies=args.cookies, account_id=args.account
+        )
         result = await publisher.login_flow()
 
         if result:
@@ -114,7 +124,9 @@ async def verify_single_platform(platform: str, args, logger) -> bool:
     platform_name = platform_names.get(platform, platform)
 
     try:
-        publisher = get_publisher(platform=platform, cookies=args.cookies)
+        publisher = get_publisher(
+            platform=platform, cookies=args.cookies, account_id=args.account
+        )
         result = await publisher.verify_cookie_flow()
 
         if result:
@@ -186,7 +198,10 @@ async def upload_single_platform(
 
     try:
         publisher = get_publisher(
-            platform=platform, cookies=args.cookies, headless=not args.headed
+            platform=platform,
+            cookies=args.cookies,
+            headless=not args.headed,
+            account_id=args.account,
         )
 
         result = await publisher.upload_video_flow(
@@ -264,6 +279,7 @@ async def cmd_upload(args):
         f"  定时: {publish_date.strftime('%Y-%m-%d %H:%M') if publish_date else '立即发布'}"
     )
     print(f"  模式: {'有头' if args.headed else '无头'}")
+    print(f"  账号: {args.account}")
     print(f"  平台: {', '.join(platform_names.get(p, p) for p in platforms)}")
     print(f"{'=' * 50}\n")
 
@@ -389,6 +405,9 @@ def create_parser():
         help="目标平台",
     )
     login_parser.add_argument("--cookies", type=str, help="Cookie 保存路径")
+    login_parser.add_argument(
+        "--account", default="default", help="账号 ID（默认: default）"
+    )
     login_parser.add_argument("--debug", action="store_true", help="调试模式")
     login_parser.set_defaults(func=cmd_login)
 
@@ -404,6 +423,9 @@ def create_parser():
         help="目标平台 (all 表示所有平台)",
     )
     verify_parser.add_argument("--cookies", type=str, help="Cookie 文件路径")
+    verify_parser.add_argument(
+        "--account", default="default", help="账号 ID（默认: default）"
+    )
     verify_parser.add_argument(
         "--parallel", "-p", action="store_true", help="并行验证多个平台"
     )
@@ -434,6 +456,9 @@ def create_parser():
         "--schedule", type=str, help='定时发布 (小时数 或 "YYYY-MM-DD HH:MM")'
     )
     upload_parser.add_argument("--cookies", type=str, help="Cookie 文件路径")
+    upload_parser.add_argument(
+        "--account", default="default", help="账号 ID（默认: default）"
+    )
     upload_parser.add_argument(
         "--headed", action="store_true", help="使用有头模式（可见浏览器）上传"
     )

@@ -12,9 +12,12 @@ from enum import Enum
 from pathlib import Path
 from typing import AsyncIterator, Awaitable, Callable
 
+from filelock import FileLock, Timeout
 from playwright.async_api import Error, Page
 
+from ..account_manager import AccountContext
 from ..utils.log import StepLogger
+from ..utils.permissions import ensure_private_directory
 from .browser import BrowserChannel, StealthBrowser
 from .page_actions import PageActions
 
@@ -125,6 +128,7 @@ class AuthenticationManager:
         *,
         platform_name: str,
         state_store: AuthenticationStateStore,
+        account_context: AccountContext | None = None,
         browser_factory: BrowserFactory = StealthBrowser.create,
     ):
         self.config = config
@@ -133,26 +137,53 @@ class AuthenticationManager:
         self._browser_factory = browser_factory
         self._actions = PageActions(logger)
         self.state = state_store
+        self.account_context = account_context
+
+    async def _create_browser(self, *, headless: bool) -> StealthBrowser:
+        options = {"headless": headless, "channel": self.config.browser_channel}
+        if self.account_context is not None:
+            options["profile_dir"] = self.account_context.browser_profile_dir
+        return await self._browser_factory(**options)
+
+    @asynccontextmanager
+    async def _account_session(self) -> AsyncIterator[None]:
+        if self.account_context is None:
+            yield
+            return
+
+        ensure_private_directory(self.account_context.lock_path.parent)
+        lock = FileLock(str(self.account_context.lock_path))
+        try:
+            await asyncio.to_thread(lock.acquire, timeout=0)
+        except Timeout as exc:
+            raise AuthenticationError(
+                "账号正在被其他任务使用: "
+                f"{self.account_context.platform}/{self.account_context.account_id}"
+            ) from exc
+        try:
+            self.account_context.prepare()
+            yield
+        finally:
+            await asyncio.to_thread(lock.release)
 
     async def login(self) -> bool:
         """Ensure an interactive browser session is authenticated."""
         try:
-            with self.logger.step("login_flow", platform=self.platform_name):
-                async with await self._browser_factory(
-                    headless=False, channel=self.config.browser_channel
-                ) as browser:
-                    await self.state.restore(browser)
-                    page = await browser.new_page()
-                    try:
-                        result = await self._open_verification_page(page)
-                        if result.status is AuthStatus.AUTHENTICATED:
-                            self.logger.info("已有登录状态可用")
-                        else:
-                            await self._interactive_login(page)
-                        await self.state.save(browser)
-                        return True
-                    finally:
-                        await page.close()
+            async with self._account_session():
+                with self.logger.step("login_flow", platform=self.platform_name):
+                    async with await self._create_browser(headless=False) as browser:
+                        await self.state.restore(browser)
+                        page = await browser.new_page()
+                        try:
+                            result = await self._open_verification_page(page)
+                            if result.status is AuthStatus.AUTHENTICATED:
+                                self.logger.info("已有登录状态可用")
+                            else:
+                                await self._interactive_login(page)
+                            await self.state.save(browser)
+                            return True
+                        finally:
+                            await page.close()
         except Exception as exc:
             self.logger.error("登录失败", reason=str(exc)[:200])
             return False
@@ -160,20 +191,19 @@ class AuthenticationManager:
     async def verify(self) -> bool:
         """Verify restored state and the persistent browser profile."""
         try:
-            with self.logger.step("verify_authentication"):
-                async with await self._browser_factory(
-                    headless=True, channel=self.config.browser_channel
-                ) as browser:
-                    await self.state.restore(browser)
-                    page = await browser.new_page()
-                    try:
-                        result = await self._open_verification_page(page)
-                        authenticated = result.status is AuthStatus.AUTHENTICATED
-                        if authenticated:
-                            await self.state.save(browser)
-                        return authenticated
-                    finally:
-                        await page.close()
+            async with self._account_session():
+                with self.logger.step("verify_authentication"):
+                    async with await self._create_browser(headless=True) as browser:
+                        await self.state.restore(browser)
+                        page = await browser.new_page()
+                        try:
+                            result = await self._open_verification_page(page)
+                            authenticated = result.status is AuthStatus.AUTHENTICATED
+                            if authenticated:
+                                await self.state.save(browser)
+                            return authenticated
+                        finally:
+                            await page.close()
         except Exception as exc:
             self.logger.error("认证验证异常", reason=str(exc)[:200])
             return False
@@ -189,23 +219,23 @@ class AuthenticationManager:
         consistent for platforms such as Kuaishou.
         """
         browser_headless = False if auto_login else headless
-        async with await self._browser_factory(
-            headless=browser_headless, channel=self.config.browser_channel
-        ) as browser:
-            await self.state.restore(browser)
-            page = await browser.new_page()
-            try:
-                result = await self._open_verification_page(page)
-                if result.status is not AuthStatus.AUTHENTICATED:
-                    if not auto_login:
-                        raise AuthenticationError(
-                            f"认证状态不可用: {result.status.value} ({result.evidence})"
-                        )
-                    await self._interactive_login(page)
-                await self.state.save(browser)
-                yield page
-            finally:
-                await page.close()
+        async with self._account_session():
+            async with await self._create_browser(headless=browser_headless) as browser:
+                await self.state.restore(browser)
+                page = await browser.new_page()
+                try:
+                    result = await self._open_verification_page(page)
+                    if result.status is not AuthStatus.AUTHENTICATED:
+                        if not auto_login:
+                            raise AuthenticationError(
+                                "认证状态不可用: "
+                                f"{result.status.value} ({result.evidence})"
+                            )
+                        await self._interactive_login(page)
+                    await self.state.save(browser)
+                    yield page
+                finally:
+                    await page.close()
 
     async def _interactive_login(self, page: Page) -> None:
         await page.goto(self.config.login_url, timeout=30000)

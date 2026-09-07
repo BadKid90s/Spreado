@@ -9,7 +9,7 @@ from typing import List, Optional
 
 from playwright.async_api import Page
 
-from ..conf import COOKIES_DIR
+from ..account_manager import AccountContext, AccountManager, DEFAULT_ACCOUNT_ID
 from ..models.task import Task
 from ..utils.log import StepLogger, get_uploader_logger
 from .authentication import (
@@ -30,20 +30,26 @@ class BasePublisher(ABC):
 
     logger: StepLogger
     cookie_file_path: Path
+    account_context: AccountContext
 
     def __init__(
         self,
         logger: Optional[StepLogger] = None,
         cookie_file_path: str | Path | None = None,
         headless: bool = True,
+        account_id: str = DEFAULT_ACCOUNT_ID,
+        account_manager: AccountManager | None = None,
     ):
         self.logger = logger or get_uploader_logger(self.platform_name)
+        self.account_id = account_id
         uses_managed_cookie_directory = cookie_file_path is None
-        self.cookie_file_path = (
-            COOKIES_DIR / f"{self.platform_name}_uploader" / "account.json"
-            if cookie_file_path is None
-            else Path(cookie_file_path)
+        manager = account_manager or AccountManager()
+        self.account_context = manager.get_account_context(
+            self.platform_name,
+            account_id,
+            storage_state_path=cookie_file_path,
         )
+        self.cookie_file_path = self.account_context.storage_state_path
         self._headless = headless
         self.actions = PageActions(self.logger)
         state_store = AuthenticationStateStore(
@@ -56,6 +62,7 @@ class BasePublisher(ABC):
             self.logger,
             platform_name=self.platform_name,
             state_store=state_store,
+            account_context=self.account_context,
         )
 
     @property
@@ -157,6 +164,13 @@ class BasePublisher(ABC):
         raise NotImplementedError(f"平台 {self.display_name} 暂不支持图文发布")
 
     async def execute(self, task: Task) -> bool:
+        if task.account_id != self.account_id:
+            self.logger.error(
+                "任务账号与发布器账号不一致",
+                task_account=task.account_id,
+                publisher_account=self.account_id,
+            )
+            return False
         if task.type == "video":
             return await self.publish_video(task)
         if task.type == "image_text":

@@ -7,6 +7,8 @@ Spreado 使用组合式核心架构。平台插件继承 `BasePublisher`，认�
 | 组件 | 职责 |
 |---|---|
 | `BasePublisher` | 平台契约、认证与发布编排、Task 分发 |
+| `AccountContext` | 聚合一个账号的状态、profile、元数据和锁路径 |
+| `AccountManager` | 校验账号标识并解析账号级资源路径 |
 | `AuthenticationManager` | 恢复状态、验证登录、交互登录、提供已认证页面 |
 | `AuthenticationStateStore` | 读写 `account.json` |
 | `StealthBrowser` | 系统浏览器发现、CDP 连接、profile 生命周期 |
@@ -33,7 +35,9 @@ authentication_config = AuthenticationConfig(
 `upload_video_flow()` 在同一个浏览器会话中完成全部步骤：
 
 ```text
-创建 CDP 浏览器会话
+解析 (platform, account_id) 并获取账号锁
+        |
+使用账号专属 profile 创建 CDP 浏览器会话
         |
 恢复 account.json，并复用浏览器 profile
         |
@@ -49,7 +53,7 @@ authentication_config = AuthenticationConfig(
                   调用平台 _upload_video()
 ```
 
-认证验证和发布不再分别启动浏览器，因此设备指纹、Session Cookie 和页面存储保持一致。
+认证验证和发布不再分别启动浏览器，因此设备指纹、Session Cookie 和页面存储保持一致。锁覆盖完整浏览器生命周期，同一账号不能并发操作，不同账号则可安全并行。
 
 ## 登录流程
 
@@ -63,7 +67,7 @@ authentication_config = AuthenticationConfig(
 
 ## Task 入口
 
-业务代码可以调用 `BasePublisher.execute(task)`。视频任务会分发到 `publish_video()`，再进入 `upload_video_flow()`；图文任务由支持的平台覆盖 `publish_image_text()`。
+业务代码可以调用 `BasePublisher.execute(task)`。`Task.account_id` 必须与发布器构造时的 `account_id` 一致；视频任务会分发到 `publish_video()`，再进入 `upload_video_flow()`；图文任务由支持的平台覆盖 `publish_image_text()`。
 
 CLI 仍可直接调用以下稳定接口：
 

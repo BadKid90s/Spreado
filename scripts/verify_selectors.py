@@ -26,6 +26,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from playwright.async_api import Error  # noqa: E402
 
+from spreado.account_manager import AccountManager  # noqa: E402
 from spreado.core.browser import StealthBrowser  # noqa: E402
 from spreado.plugin_loader import get_plugin_loader  # noqa: E402
 
@@ -121,16 +122,22 @@ async def verify_platform(
     *,
     headless: bool = True,
     cookies_dir: Optional[Path] = None,
+    account_id: str = "default",
 ) -> PlatformResult:
     loader = get_plugin_loader()
     cls = loader.get_publisher_class(name)
     if cookies_dir is not None:
-        cookie_path = cookies_dir / f"{name}_uploader" / "account.json"
-        inst = cls(cookie_file_path=cookie_path)
+        inst = cls(
+            account_id=account_id,
+            account_manager=AccountManager(base_dir=cookies_dir),
+        )
     else:
-        inst = cls()
+        inst = cls(account_id=account_id)
 
-    async with await StealthBrowser.create(headless=headless) as browser:
+    async with await StealthBrowser.create(
+        headless=headless,
+        profile_dir=inst.account_context.browser_profile_dir,
+    ) as browser:
         login_result = await _verify_page(
             browser,
             inst.authentication_config.login_url,
@@ -139,7 +146,10 @@ async def verify_platform(
 
     publish_result: Optional[PageResult] = None
     if inst.cookie_file_path.exists():
-        async with await StealthBrowser.create(headless=headless) as browser:
+        async with await StealthBrowser.create(
+            headless=headless,
+            profile_dir=inst.account_context.browser_profile_dir,
+        ) as browser:
             await browser.load_cookies_from_file(inst.cookie_file_path)
             publish_result = await _verify_page(
                 browser,
@@ -261,8 +271,9 @@ async def main() -> int:
         "--cookies-dir",
         type=Path,
         default=None,
-        help="cookie 根目录；目录下应有 {platform}_uploader/account.json",
+        help="cookie 根目录；支持新账号目录和旧版 {platform}_uploader 目录",
     )
+    parser.add_argument("--account", default="default", help="账号 ID")
     args = parser.parse_args()
 
     loader = get_plugin_loader()
@@ -276,7 +287,10 @@ async def main() -> int:
         print(f"[verify] 正在检查 {n} ...", flush=True)
         try:
             r = await verify_platform(
-                n, headless=not args.headed, cookies_dir=args.cookies_dir
+                n,
+                headless=not args.headed,
+                cookies_dir=args.cookies_dir,
+                account_id=args.account,
             )
         except Exception as e:
             print(f"[verify] {n} 异常: {e}", flush=True)

@@ -91,6 +91,9 @@ pip install .
 # 登录抖音（支持扫码/账密，等待手机确认后自动保存）
 spreado login douyin
 
+# 登录同一平台的另一个账号
+spreado login douyin --account brand-b
+
 # 登录小红书
 spreado login xiaohongshu
 
@@ -112,6 +115,9 @@ spreado verify all
 # 检查单个平台
 spreado verify douyin
 
+# 检查指定账号
+spreado verify douyin --account brand-b
+
 # 并行验证（更快）
 spreado verify all --parallel
 ```
@@ -123,6 +129,9 @@ spreado verify all --parallel
 ```bash
 # 上传到抖音
 spreado upload douyin --video video.mp4 --title "我的视频标题"
+
+# 使用指定账号上传
+spreado upload douyin --account brand-b --video video.mp4 --title "我的视频标题"
 
 # 上传到小红书（需要封面）
 spreado upload xiaohongshu --video video.mp4 --cover cover.jpg --title "标题"
@@ -187,7 +196,7 @@ cookies/
         └── account.json
 ```
 
-> 多账号支持：使用 `--cookies` 参数可指定自定义路径，或在目录中使用不同账号名替换 `default`。
+> 多账号支持：登录、验证和上传时使用相同的 `--account <账号ID>`。每个账号的认证文件、浏览器 profile 和运行锁均相互隔离；`--cookies` 仅用于覆盖认证文件路径。
 
 ### 自定义 Cookie 路径
 
@@ -206,9 +215,7 @@ from spreado.plugins.douyin.uploader import DouYinUploader
 
 async def upload_video():
     # 初始化上传器
-    uploader = DouYinUploader(
-        cookie_file_path=Path("cookies/douyin/default/account.json")
-    )
+    uploader = DouYinUploader(account_id="brand-b")
 
     # 上传视频
     result = await uploader.upload_video_flow(
@@ -238,13 +245,15 @@ Spreado 通过 Chrome DevTools Protocol（CDP）连接系统真实浏览器，�
 2. **浏览器类型** - `SPREADO_BROWSER_CHANNEL`
 3. **自动检测** - 查找已安装的 Chrome、Edge、Chromium 或 Brave
 
-浏览器使用持久化的 Spreado 专用配置目录，不会接管日常浏览器配置。默认位置为：
+浏览器使用按账号隔离的持久化 Spreado 专用配置目录，不会接管日常浏览器配置。默认根目录为：
 
 | 平台 | 配置目录 |
 |-----|---------|
-| Windows | `%LOCALAPPDATA%\Spreado\browser-profile` |
-| macOS | `~/Library/Application Support/Spreado/browser-profile` |
-| Linux | `${XDG_CONFIG_HOME:-~/.config}/spreado/browser-profile` |
+| Windows | `%LOCALAPPDATA%\Spreado\browser-profiles` |
+| macOS | `~/Library/Application Support/Spreado/browser-profiles` |
+| Linux | `${XDG_CONFIG_HOME:-~/.config}/spreado/browser-profiles` |
+
+实际 profile 路径会追加 `{platform}/{account_id}`。同一账号不能同时运行两个登录、验证或发布流程，不同账号可以并行。
 
 ### 自动检测
 
@@ -270,8 +279,8 @@ export SPREADO_BROWSER_CHANNEL=msedge
 # 或指定浏览器路径
 export SPREADO_BROWSER_PATH="/path/to/chrome"
 
-# 可选：指定 Spreado 专用的持久化配置目录
-export SPREADO_BROWSER_PROFILE_DIR="/path/to/spreado-profile"
+# 可选：指定账号 profile 的根目录
+export SPREADO_BROWSER_PROFILES_DIR="/path/to/spreado-profiles"
 ```
 
 ## 🛠️ 故障排除

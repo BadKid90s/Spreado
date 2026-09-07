@@ -23,6 +23,7 @@ classifiers = [
 keywords = ["video", "upload", "automation", "social-media", "douyin", "xiaohongshu", "kuaishou"]
 requires-python = ">=3.10"
 dependencies = [
+    "filelock>=3.16.0",
     "playwright>=1.40.0",
     "playwright-stealth>=2.0.1",
     "loguru>=0.7.0",

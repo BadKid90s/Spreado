@@ -247,7 +247,8 @@ cookies/
 ├── douyin/
 │   └── default/
 │       ├── account.json   # Playwright storage_state（cookies）
-│       └── meta.json      # 账号元数据（UA、指纹等）
+│       ├── meta.json      # 账号元数据
+│       └── .account.lock  # 同账号进程互斥锁
 ├── xiaohongshu/
 │   └── default/
 │       └── account.json
@@ -259,7 +260,7 @@ cookies/
         └── account.json
 ```
 
-> 支持多账号：在平台目录下以不同账号名代替 `default` 即可隔离存储。旧版 `{platform}_uploader/account.json` 格式可通过 `AccountManager.migrate_legacy_cookies()` 自动迁移。
+> 支持多账号：使用 `--account <账号ID>` 选择账号。Cookie 位于 `cookies/{platform}/{account_id}`，浏览器 profile 位于系统应用数据目录的 `browser-profiles/{platform}/{account_id}`。旧版 `{platform}_uploader/account.json` 会由默认账号兼容读取，也可通过 `AccountManager.migrate_legacy_cookies()` 显式迁移。
 
 ## 开发约定
 

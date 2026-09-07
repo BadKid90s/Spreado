@@ -152,6 +152,7 @@ class StealthBrowser:
         headless: bool = False,
         channel: BrowserChannel = None,
         executable_path: Optional[str] = None,
+        profile_dir: str | Path | None = None,
     ):
         self.headless = headless
         self.channel = channel
@@ -161,7 +162,11 @@ class StealthBrowser:
         self.browser: Optional[Browser] = None
         self.context: Optional[BrowserContext] = None
         self._browser_process: Optional[subprocess.Popen] = None
-        self._profile_dir = _default_profile_dir()
+        self._profile_dir = (
+            Path(profile_dir).expanduser()
+            if profile_dir is not None
+            else _default_profile_dir()
+        )
         self._cdp_endpoint: Optional[str] = None
 
     @classmethod
@@ -170,8 +175,9 @@ class StealthBrowser:
         headless: bool = True,
         channel: BrowserChannel = None,
         executable_path: Optional[str] = None,
+        profile_dir: str | Path | None = None,
     ) -> "StealthBrowser":
-        instance = cls(headless, channel, executable_path)
+        instance = cls(headless, channel, executable_path, profile_dir)
         await instance.__aenter__()
         return instance
 
