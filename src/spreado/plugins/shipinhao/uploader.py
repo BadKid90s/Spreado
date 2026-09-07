@@ -14,6 +14,7 @@ from typing import Any, List, Optional
 
 from playwright.async_api import Page
 
+from spreado.core.authentication import AuthenticationConfig
 from spreado.core.base_publisher import BasePublisher
 
 _SHADOW_EVAL = """
@@ -55,26 +56,17 @@ class ShiPinHaoUploader(BasePublisher):
     def display_name(self) -> str:
         return "视频号"
 
-    @property
-    def login_url(self) -> str:
-        return "https://channels.weixin.qq.com/login.html"
-
-    @property
-    def publish_url(self) -> str:
-        return "https://channels.weixin.qq.com/platform/post/create"
-
-    @property
-    def _login_selectors(self) -> List[str]:
-        return [
+    authentication_config = AuthenticationConfig(
+        login_url="https://channels.weixin.qq.com/login.html",
+        verification_url="https://channels.weixin.qq.com/platform/post/create",
+        login_selectors=(
             ".login-view",
             ".login-content",
             "iframe.display",
             'link:has-text("视频号助手")',
-        ]
-
-    @property
-    def _authed_selectors(self) -> List[str]:
-        return ["div.input-editor", 'button:has-text("发表")']
+        ),
+        authenticated_selectors=("div.input-editor", 'button:has-text("发表")'),
+    )
 
     # ---------------------------------------------------------------- shadow DOM helpers
 
@@ -266,7 +258,7 @@ class ShiPinHaoUploader(BasePublisher):
             except Exception:
                 return False
 
-        return await self._wait_for_condition(
+        return await self.actions.wait_for_condition(
             check, timeout=120.0, interval=2.0, desc="upload_complete"
         )
 

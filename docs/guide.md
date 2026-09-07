@@ -8,7 +8,7 @@ Spreado 是一个基于 Python、系统 Chromium 浏览器和 CDP 的多平台�
 
 ### 核心特性
 
-- **统一架构**: 所有平台上传器继承自 `BaseUploader` 基类，接口统一
+- **统一架构**: 所有平台发布器继承自 `BasePublisher`，接口统一
 - **模块化设计**: 高内聚低耦合，易于维护和扩展
 - **自动化认证**: 支持有头模式登录和无头模式 Cookie 验证
 - **CLI 工具**: 提供完整的命令行工具，支持登录、上传、验证等操作
@@ -28,8 +28,9 @@ Spreado/
 │   ├── core/                    # 核心抽象层
 │   │   ├── __init__.py
 │   │   ├── browser.py           # StealthBrowser 浏览器封装与反检测
-│   │   ├── uploader.py          # BaseUploader 上传器抽象基类
-│   │   └── base_publisher.py    # BasePublisher（Task 驱动发布接口）
+│   │   ├── authentication.py    # 认证配置、状态存储与会话管理
+│   │   ├── page_actions.py      # 通用页面操作
+│   │   └── base_publisher.py    # BasePublisher 发布流程与 Task 接口
 │   ├── models/                  # 数据模型
 │   │   └── task.py              # Task 发布任务模型
 │   ├── plugins/                 # 平台插件（内置 + 外部均可）
@@ -195,20 +196,18 @@ if __name__ == "__main__":
 
 ## 架构设计
 
-### BaseUploader 基类
+### BasePublisher 基类
 
-所有平台上传器必须继承 `BaseUploader` 抽象类，实现以下属性和方法：
+所有平台发布器必须继承 `BasePublisher`，提供平台信息、认证配置和发布实现：
 
-#### 抽象属性
+#### 平台契约
 
-| 属性 | 类型 | 说明 |
+| 成员 | 类型 | 说明 |
 |------|------|------|
 | `platform_name` | str | 平台名称 |
-| `login_url` | str | 登录页面 URL |
-| `login_success_url` | str | 登录成功后的跳转 URL |
-| `upload_url` | str | 上传页面 URL |
-| `success_url_pattern` | str | 上传成功后的 URL 模式 |
-| `_login_selectors` | List[str] | 登录相关页面元素选择器列表 |
+| `display_name` | str | 平台显示名称 |
+| `authentication_config` | AuthenticationConfig | 登录 URL、验证 URL 和认证 DOM 信号 |
+| `_upload_video()` | coroutine | 平台特定的视频发布实现 |
 
 #### 核心方法
 

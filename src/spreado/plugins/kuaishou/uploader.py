@@ -5,6 +5,7 @@ import re
 
 from playwright.async_api import Page, Error
 
+from spreado.core.authentication import AuthenticationConfig
 from spreado.core.base_publisher import BasePublisher
 
 
@@ -21,26 +22,17 @@ class KuaiShouUploader(BasePublisher):
     def display_name(self) -> str:
         return "快手"
 
-    @property
-    def login_url(self) -> str:
-        return "https://passport.kuaishou.com/pc/account/login"
-
-    @property
-    def publish_url(self) -> str:
-        return "https://cp.kuaishou.com/article/publish/video"
-
-    @property
-    def _login_selectors(self) -> List[str]:
-        return [
+    authentication_config = AuthenticationConfig(
+        login_url="https://passport.kuaishou.com/pc/account/login",
+        verification_url="https://cp.kuaishou.com/article/publish/video",
+        login_selectors=(
             'text="立即登录"',
             ".platform-switch-tips",
             "button.pl-btn.pl-btn-primary",
             ".login-btn",
-        ]
-
-    @property
-    def _authed_selectors(self) -> List[str]:
-        return ["#work-description-edit", 'text="发布作品"']
+        ),
+        authenticated_selectors=("#work-description-edit", 'text="发布作品"'),
+    )
 
     async def _dismiss_overlays(self, page: Page) -> None:
         """关闭 react-joyride 新手引导等遮罩层。"""
@@ -122,7 +114,7 @@ class KuaiShouUploader(BasePublisher):
                 "input[type='file'][accept*='video']",
                 "input[type='file']",
             ]
-            if await self._upload_file_to_first(
+            if await self.actions.upload_file_to_first(
                 page, file_input_selectors, file_path, timeout=10000
             ):
                 self.logger.info("视频文件已注入")
@@ -165,7 +157,7 @@ class KuaiShouUploader(BasePublisher):
                     return True
             return False
 
-        return await self._wait_for_condition(
+        return await self.actions.wait_for_condition(
             check, timeout=120.0, interval=2.0, desc="upload_complete"
         )
 
@@ -237,7 +229,7 @@ class KuaiShouUploader(BasePublisher):
             await upload_btn.click(force=True)
 
             # 3) 上传封面图片
-            if not await self._upload_file_to_first(
+            if not await self.actions.upload_file_to_first(
                 page,
                 [
                     "div[class*='upload'] input[type='file']",
@@ -316,7 +308,7 @@ class KuaiShouUploader(BasePublisher):
             except Error:
                 pass
             if await confirm_btn.count() > 0 and await confirm_btn.is_visible():
-                return await self._click_and_wait_for_url(
+                return await self.actions.click_and_wait_for_url(
                     page, confirm_btn, success_pattern, timeout=15000
                 )
 

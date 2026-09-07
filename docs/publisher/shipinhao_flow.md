@@ -8,7 +8,7 @@
 
 ### 2.1 ShipinhaoUploader 类
 
-`ShipinhaoUploader` 是上传器的核心类，继承自 `BaseUploader`，实现了视频号平台的视频上传功能。
+`ShiPinHaoUploader` 继承自 `BasePublisher`，实现视频号平台的视频发布功能。
 
 ### 2.2 主要属性
 
@@ -19,7 +19,7 @@
 | login_success_url | str | 登录成功后的跳转URL |
 | upload_url | str | 视频上传页面URL |
 | success_url_pattern | str | 上传成功页面URL模式 |
-| _login_selectors | List[str] | 登录相关元素选择器列表 |
+| authentication_config | AuthenticationConfig | 登录地址、验证地址及认证元素 |
 
 ## 3. 完整工作流程
 

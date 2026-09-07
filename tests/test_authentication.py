@@ -10,7 +10,7 @@ from spreado.core.authentication import (
     AuthenticationManager,
     AuthenticationStateStore,
 )
-from spreado.core.base_uploader import BaseUploader
+from spreado.core.base_publisher import BasePublisher
 from spreado.core.browser import StealthBrowser
 
 
@@ -159,6 +159,10 @@ class _Playwright:
 
 
 class AuthenticationTests(unittest.TestCase):
+    def test_publisher_groups_authentication_configuration(self):
+        self.assertFalse(hasattr(BasePublisher, "_login_selectors"))
+        self.assertFalse(hasattr(BasePublisher, "_authed_selectors"))
+
     def test_state_store_expiration(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir) / "account.json"
@@ -203,14 +207,13 @@ class AuthenticationTests(unittest.TestCase):
 
             manager = AuthenticationManager(
                 AuthenticationConfig(
-                    platform_name="test",
                     login_url="https://passport.example/login",
-                    publish_url="https://creator.example/publish",
+                    verification_url="https://creator.example/publish",
                     login_selectors=(),
-                    authed_selectors=(),
-                    cookie_file_path=state_path,
                 ),
                 _Logger(),
+                platform_name="test",
+                state_store=AuthenticationStateStore(state_path, _Logger()),
                 browser_factory=factory,
             )
 
@@ -220,22 +223,20 @@ class AuthenticationTests(unittest.TestCase):
             self.assertEqual(factory_calls, [{"headless": False, "channel": None}])
 
     def test_upload_uses_authenticated_page_without_a_second_browser(self):
-        class Publisher(BaseUploader):
+        class Publisher(BasePublisher):
+            authentication_config = AuthenticationConfig(
+                login_url="https://passport.example/login",
+                verification_url="https://creator.example/publish",
+                login_selectors=(),
+            )
+
             @property
             def platform_name(self):
                 return "test"
 
             @property
-            def login_url(self):
-                return "https://passport.example/login"
-
-            @property
-            def publish_url(self):
-                return "https://creator.example/publish"
-
-            @property
-            def _login_selectors(self):
-                return []
+            def display_name(self):
+                return "Test"
 
             async def _upload_video(self, page, file_path, **kwargs):
                 self.upload_page = page

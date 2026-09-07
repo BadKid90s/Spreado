@@ -16,14 +16,12 @@ __logo__ = r"""
  |_____/|_|    |_|  \_\______/_/    \_\_____/ \____/
 """
 
-from spreado.core.base_uploader import BaseUploader
 from spreado.core.base_publisher import BasePublisher
 from spreado.plugin_loader import PluginLoader, get_plugin_loader
 from spreado.account_manager import AccountManager
 from spreado.models.task import Task
 
 __all__ = [
-    "BaseUploader",
     "BasePublisher",
     "PluginLoader",
     "get_plugin_loader",

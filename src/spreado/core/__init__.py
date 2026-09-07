@@ -11,7 +11,6 @@ from spreado.core.authentication import (
     AuthenticationStateStore,
 )
 from spreado.core.base_publisher import BasePublisher
-from spreado.core.base_uploader import BaseUploader
 from spreado.core.browser import StealthBrowser
 
 __all__ = [
@@ -20,6 +19,5 @@ __all__ = [
     "AuthenticationManager",
     "AuthenticationStateStore",
     "BasePublisher",
-    "BaseUploader",
     "StealthBrowser",
 ]

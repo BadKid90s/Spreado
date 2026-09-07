@@ -1,270 +1,93 @@
 # 核心执行流程
 
-本文档详细描述了 Spreado 多平台视频上传工具的核心执行流程。
+Spreado 使用组合式核心架构。平台插件继承 `BasePublisher`，认证、浏览器和页面操作由独立服务负责。
 
-## 1. 有头模式登录流程
+## 组件职责
 
-**模式**: 有头模式（headless=False）
-**目的**: 用户手动登录并保存 Cookie
-**入口**: `BaseUploader.login_flow()`
+| 组件 | 职责 |
+|---|---|
+| `BasePublisher` | 平台契约、认证与发布编排、Task 分发 |
+| `AuthenticationManager` | 恢复状态、验证登录、交互登录、提供已认证页面 |
+| `AuthenticationStateStore` | 读写 `account.json` |
+| `StealthBrowser` | 系统浏览器发现、CDP 连接、profile 生命周期 |
+| `PageActions` | 元素查找、点击、文件注入和轮询等页面操作 |
+| 平台插件 | 提供 `AuthenticationConfig` 并实现 `_upload_video()` |
 
-### 执行步骤
-
-1. 创建 `StealthBrowser` 实例（headless=False）
-2. 创建新页面并导航到登录页面 URL
-3. 输出提示信息，等待用户在浏览器中完成登录
-4. 使用 `page.wait_for_url()` 监听页面跳转到登录成功 URL
-5. 登录成功后保存 Cookie 到账户文件（JSON 格式）
-6. 清理浏览器资源
-
-### 关键代码
+`BasePublisher` 不包含登录选择器，也不实现浏览器细节。平台认证信息集中定义在一个不可变配置对象中：
 
 ```python
-async def login_flow(self) -> bool:
-    async with await StealthBrowser.create(headless=False) as browser:
-        page = await browser.new_page()
-        await page.goto(self.login_url)
-        self.logger.info(f"[+] 已打开登录页面，请在浏览器中完成登录操作")
-        await page.wait_for_url(
-            url=self.login_success_url,
-            timeout=60000,
-            wait_until="commit"
+authentication_config = AuthenticationConfig(
+    login_url="https://passport.example.com/login",
+    verification_url="https://creator.example.com/publish",
+    login_selectors=(".login-form",),
+    authenticated_selectors=(".publish-editor",),
+)
+```
+
+## 发布流程
+
+`upload_video_flow()` 在同一个浏览器会话中完成全部步骤：
+
+```text
+创建 CDP 浏览器会话
+        |
+恢复 account.json，并复用浏览器 profile
+        |
+打开 verification_url 验证认证状态
+        |
+认证无效且 auto_login=True?
+   |                    |
+  否                   是
+返回失败          在当前会话交互登录
+                        |
+                  保存最新认证状态
+                        |
+                  调用平台 _upload_video()
+```
+
+认证验证和发布不再分别启动浏览器，因此设备指纹、Session Cookie 和页面存储保持一致。
+
+## 登录流程
+
+`login_flow()` 表示“确保已经登录”，不是无条件重新登录：
+
+1. 恢复 `account.json` 中的 Cookie 和 LocalStorage。
+2. 使用持久浏览器 profile 打开验证页。
+3. 已认证时刷新认证备份并返回。
+4. 未认证时打开登录页，等待用户完成操作。
+5. 返回验证页二次确认并保存最新状态。
+
+## Task 入口
+
+业务代码可以调用 `BasePublisher.execute(task)`。视频任务会分发到 `publish_video()`，再进入 `upload_video_flow()`；图文任务由支持的平台覆盖 `publish_image_text()`。
+
+CLI 仍可直接调用以下稳定接口：
+
+- `login_flow()`
+- `verify_cookie_flow(auto_login=False)`
+- `upload_video_flow(...)`
+
+## 平台插件
+
+新平台只需要继承 `BasePublisher`：
+
+```python
+class ExamplePublisher(BasePublisher):
+    authentication_config = AuthenticationConfig(...)
+
+    @property
+    def platform_name(self) -> str:
+        return "example"
+
+    @property
+    def display_name(self) -> str:
+        return "示例平台"
+
+    async def _upload_video(self, page, file_path, **options) -> bool:
+        await self.actions.upload_file_to_first(
+            page, ["input[type=file]"], file_path
         )
-        self.cookie_file_path.parent.mkdir(parents=True, exist_ok=True)
-        await page.context.storage_state(path=self.cookie_file_path)
-        self.logger.info(f"[+] Cookie已保存到: {self.cookie_file_path}")
         return True
 ```
 
-## 2. 无头模式验证 Cookie 流程
-
-**模式**: 无头模式（headless=True）
-**目的**: 验证已保存的 Cookie 是否仍然有效
-**入口**: `BaseUploader._verify_cookie()`
-
-### 执行步骤
-
-1. 检查 Cookie 文件是否存在
-2. 创建 `StealthBrowser` 实例（headless=True）
-3. 从文件加载 Cookie 到浏览器上下文
-4. 导航到上传页面
-5. 检查页面上是否有登录相关元素（通过 `_login_selectors` 定义）
-6. 根据检查结果返回验证成功/失败
-7. 清理浏览器资源
-
-### 关键代码
-
-```python
-async def _verify_cookie(self) -> bool:
-    if not self.cookie_file_path.exists():
-        self.logger.warning("[!] 账户文件不存在")
-        return False
-
-    async with await StealthBrowser.create(headless=True) as browser:
-        await browser.load_cookies_from_file(self.cookie_file_path)
-        async with await browser.new_page() as page:
-            await page.goto(self.upload_url, timeout=30000)
-            login_required = await self._check_login_required(page)
-            if login_required:
-                self.logger.warning("[!] Cookie已失效")
-                return False
-            else:
-                self.logger.info("[+] Cookie有效")
-                return True
-```
-
-## 3. 主上传流程
-
-**模式**: 无头模式（headless=True）
-**目的**: 执行完整的视频上传流程
-**入口**: `BaseUploader.upload_video_flow()`
-
-### 执行步骤
-
-1. 调用 `verify_cookie_flow()` 验证登录状态
-2. 创建 `StealthBrowser` 实例（headless=True）
-3. 加载 Cookie 到浏览器上下文
-4. 创建新页面并导航到上传页面
-5. 调用平台特定的 `_upload_video()` 方法执行上传
-6. 记录上传结果
-7. 清理浏览器资源
-
-### 关键代码
-
-```python
-async def upload_video_flow(
-    self,
-    file_path: str | Path,
-    title: str = "",
-    content: str = "",
-    tags: List[str] = None,
-    publish_date: Optional[datetime] = None,
-    thumbnail_path: Optional[str | Path] = None,
-    auto_login: bool = False,
-) -> bool:
-    if not await self.verify_cookie_flow(auto_login=auto_login):
-        self.logger.error("[!] 登录失败，无法上传视频")
-        return False
-
-    async with await StealthBrowser.create(headless=True) as browser:
-        await browser.load_cookies_from_file(self.cookie_file_path)
-        async with await browser.new_page() as page:
-            await page.goto(self.upload_url)
-            result = await self._upload_video(
-                page=page,
-                file_path=file_path,
-                title=title,
-                content=content,
-                tags=tags,
-                publish_date=publish_date,
-                thumbnail_path=thumbnail_path
-            )
-            return result
-```
-
-## 4. 平台特定上传流程
-
-**目的**: 执行具体平台的视频上传逻辑
-**入口**: 各平台上传器的 `_upload_video()` 方法
-
-### 执行步骤（各平台实现可能不同）
-
-1. 等待上传页面加载完成
-2. 上传视频文件
-3. 填写视频标题
-4. 填写视频描述
-5. 设置标签（如有）
-6. 设置封面图片（如有）
-7. 设置定时发布时间（如有）
-8. 点击发布按钮
-9. 验证发布结果
-10. 返回上传成功/失败状态
-
-## 5. 主认证流程
-
-**目的**: 统一协调认证相关流程
-**入口**: `BaseUploader.verify_cookie_flow(auto_login=False)`
-
-### 执行步骤
-
-1. 检查 Cookie 文件是否存在
-2. 如果不存在：
-   - 如果 `auto_login=True`，执行登录流程
-   - 否则返回 False
-3. 如果存在，调用 `_verify_cookie()` 验证有效性
-4. 如果验证失败：
-   - 如果 `auto_login=True`，执行登录流程
-   - 否则返回 False
-5. 验证成功，返回 True
-
-### 流程图
-
-```
-verify_cookie_flow(auto_login)
-       │
-       ├─ Cookie文件不存在?
-       │     ├─ 是 → auto_login=True? → 执行 login_flow
-       │     │                        └─ 否 → 返回 False
-       │     │
-       │     └─ 否 → 调用 _verify_cookie()
-       │                  │
-       │                  ├─ Cookie有效 → 返回 True
-       │                  │
-       │                  └─ Cookie无效 → auto_login=True?
-       │                                 ├─ 是 → 执行 login_flow
-       │                                 └─ 否 → 返回 False
-```
-
-## 6. 流程间关系
-
-```
-用户执行上传命令
-       │
-       ▼
-cmd_upload (CLI)
-       │
-       ▼
-upload_video_flow (主上传流程)
-       │
-       ├─ 调用 verify_cookie_flow (主认证流程)
-       │           │
-       │           ├─ Cookie文件存在? → _verify_cookie()
-       │           │                        │
-       │           │                        ├─ 有效 → 返回 True
-       │           │                        │
-       │           │                        └─ 失效 → auto_login?
-       │           │                                   │
-       │           │                                   ├─ True → login_flow
-       │           │                                   └─ False → 返回 False
-       │           │
-       │           └─ Cookie文件不存在? → auto_login?
-       │                                        │
-       │                                        ├─ True → login_flow
-       │                                        └─ False → 返回 False
-       │
-       ▼
-     认证成功
-       │
-       ▼
-_upload_video (平台特定上传)
-       │
-       ▼
-   返回上传结果
-```
-
-## 7. 辅助方法
-
-### 元素查找
-
-`_find_first_element()` 方法提供灵活的元素查找功能：
-
-```python
-async def _find_first_element(
-    self,
-    page: Page,
-    selectors: List[str],
-    *,
-    timeout: int = 5000,
-    state: Literal['visible', 'attached', 'hidden', 'detached'] = 'visible',
-    callback: Optional[Callable] = None,
-    on_not_found: Optional[Callable] = None,
-) -> Optional[Locator]:
-```
-
-### 登录状态检查
-
-`_check_login_required()` 检查页面是否需要登录：
-
-```python
-async def _check_login_required(self, page: Page) -> bool:
-    for selector in self._login_selectors:
-        try:
-            element = page.locator(selector)
-            if await element.count() > 0:
-                if await element.first.is_visible():
-                    return True
-        except Error:
-            continue
-    return False
-```
-
-## 8. 开发调试建议
-
-### 开发阶段
-
-- 使用有头模式（headless=False）便于观察
-- 查看详细的日志输出
-- 调试页面交互问题
-
-### 生产环境
-
-- 使用无头模式（headless=True）
-- 提高执行效率
-- 减少资源占用
-
-### 调试技巧
-
-```bash
-# 使用调试模式运行
-spreado upload douyin --video video.mp4 --title "标题" --debug
-```
+平台通用页面操作通过 `self.actions` 显式调用，不再作为 `BasePublisher` 的隐式私有方法。

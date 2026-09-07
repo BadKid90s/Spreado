@@ -4,6 +4,7 @@ from typing import List, Optional
 import re
 
 from playwright.async_api import Page, Error
+from spreado.core.authentication import AuthenticationConfig
 from spreado.core.base_publisher import BasePublisher
 
 
@@ -20,26 +21,22 @@ class DouYinUploader(BasePublisher):
     def display_name(self) -> str:
         return "抖音"
 
-    @property
-    def login_url(self) -> str:
-        return "https://creator.douyin.com/"
-
-    @property
-    def publish_url(self) -> str:
-        return "https://creator.douyin.com/creator-micro/content/upload"
-
-    @property
-    def _login_selectors(self) -> List[str]:
-        return ['text="手机号登录"', 'text="扫码登录"', 'text="登录"', ".login-btn"]
-
-    @property
-    def _authed_selectors(self) -> List[str]:
-        return [
+    authentication_config = AuthenticationConfig(
+        login_url="https://creator.douyin.com/",
+        verification_url="https://creator.douyin.com/creator-micro/content/upload",
+        login_selectors=(
+            'text="手机号登录"',
+            'text="扫码登录"',
+            'text="登录"',
+            ".login-btn",
+        ),
+        authenticated_selectors=(
             "div[class^='container']",
             "div[class*='upload']",
             "input[placeholder*='作品标题']",
             "div.semi-upload",
-        ]
+        ),
+    )
 
     async def _upload_video(
         self,
@@ -148,7 +145,7 @@ class DouYinUploader(BasePublisher):
                     return True
             return False
 
-        return await self._wait_for_condition(
+        return await self.actions.wait_for_condition(
             check, timeout=120.0, interval=1.5, desc="upload_complete"
         )
 
@@ -221,7 +218,7 @@ class DouYinUploader(BasePublisher):
 
         try:
             # 1) 点击"选择封面"按钮
-            if not await self._click_first_visible(
+            if not await self.actions.click_first_visible(
                 page,
                 [
                     'text="选择封面"',
@@ -244,7 +241,7 @@ class DouYinUploader(BasePublisher):
                 return True
 
             # 3) 设置竖封面
-            await self._click_first_visible(
+            await self.actions.click_first_visible(
                 page, ['text="设置竖封面"'], force=True, timeout=2000
             )
 
@@ -253,7 +250,7 @@ class DouYinUploader(BasePublisher):
                 "div[class^='semi-upload upload'] input.semi-upload-hidden-input",
                 "input[type='file'][accept*='image']",
             ]
-            if not await self._upload_file_to_first(
+            if not await self.actions.upload_file_to_first(
                 page, upload_selectors, thumbnail_path, timeout=10000
             ):
                 self.logger.error("未找到封面图片上传 input")
@@ -262,7 +259,7 @@ class DouYinUploader(BasePublisher):
             await page.wait_for_timeout(2000)
 
             # 5) 点击完成
-            if await self._click_first_visible(
+            if await self.actions.click_first_visible(
                 page, ['button:visible:has-text("完成")'], force=True, timeout=3000
             ):
                 await page.wait_for_selector("div.extractFooter", state="detached")
@@ -479,7 +476,7 @@ class DouYinUploader(BasePublisher):
             if await publish_button.count() == 0:
                 self.logger.error("未找到发布按钮")
                 return False
-            return await self._click_and_wait_for_url(
+            return await self.actions.click_and_wait_for_url(
                 page,
                 publish_button,
                 re.compile(r"/content/manage\?enter_from=publish"),

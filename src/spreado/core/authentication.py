@@ -7,7 +7,7 @@ import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import AsyncIterator, Awaitable, Callable, Sequence
+from typing import AsyncIterator, Awaitable, Callable
 from urllib.parse import urlparse
 
 from playwright.async_api import Error, Page
@@ -23,13 +23,10 @@ class AuthenticationError(RuntimeError):
 
 @dataclass(frozen=True)
 class AuthenticationConfig:
-    platform_name: str
     login_url: str
-    publish_url: str
-    login_selectors: Sequence[str]
-    authed_selectors: Sequence[str]
-    cookie_file_path: Path
-    secure_cookie_directory: bool = False
+    verification_url: str
+    login_selectors: tuple[str, ...]
+    authenticated_selectors: tuple[str, ...] = ()
     browser_channel: BrowserChannel = None
 
 
@@ -104,29 +101,28 @@ class AuthenticationManager:
         config: AuthenticationConfig,
         logger: StepLogger,
         *,
+        platform_name: str,
+        state_store: AuthenticationStateStore,
         browser_factory: BrowserFactory = StealthBrowser.create,
     ):
         self.config = config
         self.logger = logger
+        self.platform_name = platform_name
         self._browser_factory = browser_factory
         self._actions = PageActions(logger)
-        self.state = AuthenticationStateStore(
-            config.cookie_file_path,
-            logger,
-            secure_directory=config.secure_cookie_directory,
-        )
+        self.state = state_store
 
     async def login(self) -> bool:
         """Ensure an interactive browser session is authenticated."""
         try:
-            with self.logger.step("login_flow", platform=self.config.platform_name):
+            with self.logger.step("login_flow", platform=self.platform_name):
                 async with await self._browser_factory(
                     headless=False, channel=self.config.browser_channel
                 ) as browser:
                     await self.state.restore(browser)
                     page = await browser.new_page()
                     try:
-                        if await self._open_publish_page(page):
+                        if await self._open_verification_page(page):
                             self.logger.info("已有登录状态可用")
                         else:
                             await self._interactive_login(page)
@@ -148,7 +144,7 @@ class AuthenticationManager:
                     await self.state.restore(browser)
                     page = await browser.new_page()
                     try:
-                        authenticated = await self._open_publish_page(page)
+                        authenticated = await self._open_verification_page(page)
                         if authenticated:
                             await self.state.save(browser)
                         return authenticated
@@ -175,7 +171,7 @@ class AuthenticationManager:
             await self.state.restore(browser)
             page = await browser.new_page()
             try:
-                if not await self._open_publish_page(page):
+                if not await self._open_verification_page(page):
                     if not auto_login:
                         raise AuthenticationError("认证状态无效")
                     await self._interactive_login(page)
@@ -189,13 +185,13 @@ class AuthenticationManager:
         self.logger.info("等待用户在浏览器内完成登录…")
         if not await self._wait_for_login(page, timeout=120.0):
             raise AuthenticationError("登录超时")
-        if not await self._open_publish_page(page):
+        if not await self._open_verification_page(page):
             raise AuthenticationError(
-                f"登录完成，但发布页 {self.config.publish_url} 仍要求登录"
+                f"登录完成，但验证页 {self.config.verification_url} 仍要求登录"
             )
 
-    async def _open_publish_page(self, page: Page) -> bool:
-        await page.goto(self.config.publish_url, timeout=30000)
+    async def _open_verification_page(self, page: Page) -> bool:
+        await page.goto(self.config.verification_url, timeout=30000)
         await page.wait_for_timeout(3000)
         return await self._is_authenticated(page, wait_for_positive=True)
 
@@ -212,12 +208,12 @@ class AuthenticationManager:
             self.logger.warning("认证无效", method="login_dom")
             return False
 
-        publish_domain = urlparse(self.config.publish_url).netloc
+        verification_domain = urlparse(self.config.verification_url).netloc
         current_domain = urlparse(page.url).netloc
-        if publish_domain and current_domain == publish_domain:
+        if verification_domain and current_domain == verification_domain:
             self.logger.info("认证有效", method="same_domain", url=page.url)
             return True
-        if not self.config.authed_selectors:
+        if not self.config.authenticated_selectors:
             self.logger.info("认证有效", method="no_login_dom")
             return True
         self.logger.warning("认证状态不明，视为无效", url=page.url)
@@ -246,7 +242,7 @@ class AuthenticationManager:
                 return False
 
             try:
-                return await self._open_publish_page(page)
+                return await self._open_verification_page(page)
             except Exception:
                 no_login_since = 0.0
                 return False
@@ -266,10 +262,12 @@ class AuthenticationManager:
         return False
 
     async def _check_authed(self, page: Page, *, timeout: int) -> bool:
-        if not self.config.authed_selectors:
+        if not self.config.authenticated_selectors:
             return False
-        per_selector = max(1000, timeout // max(1, len(self.config.authed_selectors)))
-        for selector in self.config.authed_selectors:
+        per_selector = max(
+            1000, timeout // max(1, len(self.config.authenticated_selectors))
+        )
+        for selector in self.config.authenticated_selectors:
             try:
                 if timeout:
                     await page.wait_for_selector(

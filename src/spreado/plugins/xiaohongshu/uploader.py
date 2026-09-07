@@ -10,6 +10,7 @@ from typing import List, Optional
 
 from playwright.async_api import Error, Page
 
+from spreado.core.authentication import AuthenticationConfig
 from spreado.core.base_publisher import BasePublisher
 
 
@@ -24,31 +25,24 @@ class XiaoHongShuUploader(BasePublisher):
     def display_name(self) -> str:
         return "小红书"
 
-    @property
-    def login_url(self) -> str:
-        return "https://creator.xiaohongshu.com/"
-
-    @property
-    def publish_url(self) -> str:
-        return "https://creator.xiaohongshu.com/publish/publish"
-
-    @property
-    def _video_upload_url(self) -> str:
-        return f"{self.publish_url}?from=homepage&target=video"
-
-    @property
-    def _login_selectors(self) -> List[str]:
-        return [
+    authentication_config = AuthenticationConfig(
+        login_url="https://creator.xiaohongshu.com/",
+        verification_url="https://creator.xiaohongshu.com/publish/publish",
+        login_selectors=(
             'text="短信登录"',
             'text="扫码登录"',
             'button:has-text("登")',
             ".login-btn",
-        ]
+        ),
+        authenticated_selectors=(
+            "input.upload-input",
+            'button:has-text("上传视频")',
+        ),
+    )
 
     @property
-    def _authed_selectors(self) -> List[str]:
-        # 上传页才会渲染的元素：视频上传 input + 顶部的"上传视频"按钮
-        return ["input.upload-input", 'button:has-text("上传视频")']
+    def _video_upload_url(self) -> str:
+        return f"{self.publish_url}?from=homepage&target=video"
 
     # ---------------------------------------------------------------- 主流程
 
@@ -150,7 +144,7 @@ class XiaoHongShuUploader(BasePublisher):
                     return False
             return False
 
-        return await self._wait_for_condition(
+        return await self.actions.wait_for_condition(
             check, timeout=120.0, interval=1.5, desc="upload_complete"
         )
 
@@ -229,7 +223,7 @@ class XiaoHongShuUploader(BasePublisher):
                 '.publish-page-content-cover [class*="cover"]',
                 '[class*="cover-plugin"]',
             ]
-            if not await self._click_first_visible(
+            if not await self.actions.click_first_visible(
                 page, cover_trigger_selectors, force=True
             ):
                 self.logger.error("未找到封面入口")
@@ -252,7 +246,7 @@ class XiaoHongShuUploader(BasePublisher):
                 '.d-modal input[type="file"]',
                 'input[type="file"]',
             ]
-            if not await self._upload_file_to_first(
+            if not await self.actions.upload_file_to_first(
                 page, upload_input_selectors, thumbnail_path, timeout=10000
             ):
                 self.logger.error("未找到封面图片上传 input")
@@ -261,7 +255,7 @@ class XiaoHongShuUploader(BasePublisher):
             await page.wait_for_timeout(2000)
 
             # 3) 确认封面选择
-            if not await self._click_first_visible(
+            if not await self.actions.click_first_visible(
                 page,
                 [
                     '.d-modal button:has-text("确定")',

@@ -8,7 +8,7 @@
 
 ### 2.1 XiaoHongShuUploader 类
 
-`XiaoHongShuUploader` 是上传器的核心类，继承自 `BaseUploader`，实现了小红书平台的视频上传功能。
+`XiaoHongShuUploader` 继承自 `BasePublisher`，实现小红书平台的视频发布功能。
 
 ### 2.2 主要属性
 
@@ -19,7 +19,7 @@
 | login_success_url | str | 登录成功后的跳转URL |
 | upload_url | str | 视频上传页面URL |
 | success_url_pattern | str | 上传成功页面URL模式 |
-| _login_selectors | List[str] | 登录相关元素选择器 |
+| authentication_config | AuthenticationConfig | 登录地址、验证地址及认证元素 |
 
 ## 3. 完整工作流程
 

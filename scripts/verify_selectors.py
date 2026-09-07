@@ -2,8 +2,8 @@
 
 为每个已注册插件验证：
 1. login_url 是否可达
-2. _login_selectors 是否能在登录页找到（反向 DOM 信号）
-3. 若存在 cookie 文件：publish_url 是否可达 + _authed_selectors 是否可见
+2. AuthenticationConfig.login_selectors 是否能在登录页找到
+3. 若存在认证文件：验证页是否可达且 authenticated_selectors 是否可见
 
 **严格只读**：从不点击发布、上传或任何写操作。
 
@@ -132,7 +132,9 @@ async def verify_platform(
 
     async with await StealthBrowser.create(headless=headless) as browser:
         login_result = await _verify_page(
-            browser, inst.login_url, inst._login_selectors
+            browser,
+            inst.authentication_config.login_url,
+            list(inst.authentication_config.login_selectors),
         )
 
     publish_result: Optional[PageResult] = None
@@ -140,7 +142,9 @@ async def verify_platform(
         async with await StealthBrowser.create(headless=headless) as browser:
             await browser.load_cookies_from_file(inst.cookie_file_path)
             publish_result = await _verify_page(
-                browser, inst.publish_url, inst._authed_selectors
+                browser,
+                inst.authentication_config.verification_url,
+                list(inst.authentication_config.authenticated_selectors),
             )
 
     return PlatformResult(
@@ -160,7 +164,7 @@ def render_report(results: List[PlatformResult], generated_at: datetime) -> str:
         "",
         "## 状态汇总",
         "",
-        "| 平台 | 状态 | 登录页 | login_selectors | publish 页 | authed_selectors |",
+        "| 平台 | 状态 | 登录页 | login_selectors | 验证页 | authenticated_selectors |",
         "|---|---|---|---|---|---|",
     ]
     for r in results:

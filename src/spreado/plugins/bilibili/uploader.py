@@ -13,6 +13,7 @@ from typing import List, Optional
 
 from playwright.async_api import Page
 
+from spreado.core.authentication import AuthenticationConfig
 from spreado.core.base_publisher import BasePublisher
 
 
@@ -31,27 +32,16 @@ class BilibiliUploader(BasePublisher):
     def display_name(self) -> str:
         return "B站"
 
-    @property
-    def login_url(self) -> str:
-        return "https://passport.bilibili.com/login"
-
-    @property
-    def publish_url(self) -> str:
-        return "https://member.bilibili.com/platform/upload/video/frame"
-
-    @property
-    def _login_selectors(self) -> List[str]:
-        return [
+    authentication_config = AuthenticationConfig(
+        login_url="https://passport.bilibili.com/login",
+        verification_url="https://member.bilibili.com/platform/upload/video/frame",
+        login_selectors=(
             'text="登录"',
             'text="扫码登录"',
             'text="短信登录"',
             ".login-btn",
-        ]
-
-    @property
-    def _authed_selectors(self) -> List[str]:
-        # bilibili 是 stub，留空让 negative DOM fallback 生效
-        return []
+        ),
+    )
 
     async def _upload_video(
         self,

@@ -1,68 +1,149 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-"""
-插件基类 BasePublisher
+"""Base contract and workflow orchestration for platform publishers."""
 
-继承 BaseUploader，新增面向任务模型的发布接口。
-所有平台插件应继承此类。
-"""
+from __future__ import annotations
 
-from abc import abstractmethod
-from typing import List
+from abc import ABC, abstractmethod
+from datetime import datetime
+from pathlib import Path
+from typing import List, Optional
 
-from .base_uploader import BaseUploader
+from playwright.async_api import Page
+
+from ..conf import COOKIES_DIR
 from ..models.task import Task
+from ..utils.log import StepLogger, get_uploader_logger
+from .authentication import (
+    AuthenticationConfig,
+    AuthenticationManager,
+    AuthenticationStateStore,
+)
+from .page_actions import PageActions
 
 
-class BasePublisher(BaseUploader):
+class BasePublisher(ABC):
+    """Common lifecycle for authentication and content publication.
+
+    Platform implementations provide identity, one grouped authentication
+    configuration, and content-specific publishing methods. Browser state and
+    low-level page operations are composed services rather than subclass APIs.
     """
-    发布器插件基类
 
-    在 BaseUploader 的基础上，新增:
-    - publish_video(task): 基于 Task 模型的视频发布
-    - publish_image_text(task): 基于 Task 模型的图文发布
-    - display_name: 中文平台名
-    - supported_content_types: 支持的内容类型列表
-    """
+    logger: StepLogger
+    cookie_file_path: Path
+
+    def __init__(
+        self,
+        logger: Optional[StepLogger] = None,
+        cookie_file_path: str | Path | None = None,
+        headless: bool = True,
+    ):
+        self.logger = logger or get_uploader_logger(self.platform_name)
+        uses_managed_cookie_directory = cookie_file_path is None
+        self.cookie_file_path = (
+            COOKIES_DIR / f"{self.platform_name}_uploader" / "account.json"
+            if cookie_file_path is None
+            else Path(cookie_file_path)
+        )
+        self._headless = headless
+        self.actions = PageActions(self.logger)
+        state_store = AuthenticationStateStore(
+            self.cookie_file_path,
+            self.logger,
+            secure_directory=uses_managed_cookie_directory,
+        )
+        self._authentication = AuthenticationManager(
+            self.authentication_config,
+            self.logger,
+            platform_name=self.platform_name,
+            state_store=state_store,
+        )
+
+    @property
+    @abstractmethod
+    def platform_name(self) -> str:
+        """Stable machine-readable platform name."""
 
     @property
     @abstractmethod
     def display_name(self) -> str:
-        """
-        平台中文名称，用于 UI 展示
+        """Human-readable platform name."""
 
-        Returns:
-            如 "抖音", "小红书"
-        """
-        pass
+    @property
+    @abstractmethod
+    def authentication_config(self) -> AuthenticationConfig:
+        """Authentication URLs, DOM signals, and browser selection."""
+
+    @property
+    def login_url(self) -> str:
+        return self.authentication_config.login_url
+
+    @property
+    def publish_url(self) -> str:
+        return self.authentication_config.verification_url
 
     @property
     def supported_content_types(self) -> List[str]:
-        """
-        支持的内容类型列表
-
-        Returns:
-            ["video"] 或 ["video", "image_text"]
-        """
         return ["video"]
 
-    async def publish_video(self, task: Task) -> bool:
-        """
-        基于 Task 模型发布视频
+    @abstractmethod
+    async def _upload_video(
+        self,
+        page: Page,
+        file_path: str | Path,
+        title: str = "",
+        content: str = "",
+        tags: Optional[List[str]] = None,
+        publish_date: Optional[datetime] = None,
+        thumbnail_path: Optional[str | Path] = None,
+    ) -> bool:
+        """Implement the platform-specific video publication steps."""
 
-        默认实现将 Task 参数映射到 upload_video_flow。
-        子类可覆盖此方法实现更复杂的逻辑。
+    async def login_flow(self) -> bool:
+        """Restore an existing session or perform an interactive login."""
+        return await self._authentication.login()
 
-        Args:
-            task: 发布任务
+    async def verify_cookie_flow(self, auto_login: bool = False) -> bool:
+        """Verify authentication, optionally falling back to interactive login."""
+        if await self._authentication.verify():
+            return True
+        return await self._authentication.login() if auto_login else False
 
-        Returns:
-            是否发布成功
-        """
-        if not task.media_files:
-            self.logger.error("[!] 任务缺少素材文件")
+    async def upload_video_flow(
+        self,
+        file_path: str | Path,
+        title: str = "",
+        content: str = "",
+        tags: Optional[List[str]] = None,
+        publish_date: Optional[datetime] = None,
+        thumbnail_path: Optional[str | Path] = None,
+        auto_login: bool = False,
+    ) -> bool:
+        """Authenticate and upload in one browser session."""
+        try:
+            with self.logger.step("upload_video_flow", title=title) as step:
+                async with self._authentication.authenticated_page(
+                    headless=self._headless,
+                    auto_login=auto_login,
+                ) as page:
+                    result = await self._upload_video(
+                        page=page,
+                        file_path=file_path,
+                        title=title,
+                        content=content,
+                        tags=tags,
+                        publish_date=publish_date,
+                        thumbnail_path=thumbnail_path,
+                    )
+                    step.add_field(result="success" if result else "failure")
+                    return result
+        except Exception as exc:
+            self.logger.error("上传流程异常", reason=str(exc)[:200])
             return False
 
+    async def publish_video(self, task: Task) -> bool:
+        if not task.media_files:
+            self.logger.error("任务缺少素材文件")
+            return False
         return await self.upload_video_flow(
             file_path=task.media_files[0],
             title=task.title,
@@ -73,33 +154,12 @@ class BasePublisher(BaseUploader):
         )
 
     async def publish_image_text(self, task: Task) -> bool:
-        """
-        基于 Task 模型发布图文
-
-        默认不支持，子类需覆盖此方法以实现图文发布。
-
-        Args:
-            task: 发布任务
-
-        Returns:
-            是否发布成功
-        """
         raise NotImplementedError(f"平台 {self.display_name} 暂不支持图文发布")
 
     async def execute(self, task: Task) -> bool:
-        """
-        统一执行入口，根据 task.type 自动分发到 publish_video 或 publish_image_text
-
-        Args:
-            task: 发布任务
-
-        Returns:
-            是否执行成功
-        """
         if task.type == "video":
             return await self.publish_video(task)
-        elif task.type == "image_text":
+        if task.type == "image_text":
             return await self.publish_image_text(task)
-        else:
-            self.logger.error(f"[!] 不支持的任务类型: {task.type}")
-            return False
+        self.logger.error("不支持的任务类型", content_type=task.type)
+        return False
