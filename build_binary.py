@@ -28,79 +28,6 @@ APP_NAME = "spreado"
 VERSION_FILE = Path("src/spreado/__init__.py")
 
 
-def get_playwright_browser_path():
-    """Get Playwright browser installation path"""
-    system = platform.system().lower()
-
-    if system == "windows":
-        base_path = (
-            Path(os.environ.get("USERPROFILE", ""))
-            / "AppData"
-            / "Local"
-            / "ms-playwright"
-        )
-    elif system == "darwin":
-        base_path = Path.home() / "Library" / "Caches" / "ms-playwright"
-    else:
-        base_path = Path.home() / ".cache" / "ms-playwright"
-
-    return base_path
-
-
-def find_chromium_path():
-    """Find Chromium browser path in Playwright installation"""
-    browser_path = get_playwright_browser_path()
-
-    if not browser_path.exists():
-        print(f"  [!] Playwright browser path not found: {browser_path}")
-        return None
-
-    # Find chromium directory (e.g., chromium-1140, chromium-1148)
-    chromium_dirs = list(browser_path.glob("chromium-*"))
-    if not chromium_dirs:
-        print(f"  [!] No Chromium installation found in: {browser_path}")
-        return None
-
-    # Use the latest version
-    chromium_dir = sorted(chromium_dirs)[-1]
-    print(f"  Found Chromium: {chromium_dir.name}")
-
-    return chromium_dir
-
-
-def copy_chromium_to_package(temp_dir: Path):
-    """Copy Chromium browser to package directory"""
-    chromium_path = find_chromium_path()
-
-    if not chromium_path:
-        print("  [!] Chromium not found, skipping browser bundling")
-        return False
-
-    # Create browser directory in package
-    browser_dest = temp_dir / "browser"
-    browser_dest.mkdir(parents=True, exist_ok=True)
-
-    print("  Copying Chromium browser (this may take a while)...")
-
-    try:
-        # Copy entire chromium directory
-        shutil.copytree(chromium_path, browser_dest / chromium_path.name, symlinks=True)
-
-        # Get size
-        total_size = sum(
-            f.stat().st_size
-            for f in (browser_dest / chromium_path.name).rglob("*")
-            if f.is_file()
-        )
-        size_mb = total_size / (1024 * 1024)
-        print(f"  Copied Chromium browser: {size_mb:.1f} MB")
-
-        return True
-    except Exception as e:
-        print(f"  [!] Failed to copy Chromium: {e}")
-        return False
-
-
 def get_version():
     """Get version number"""
     if VERSION_FILE.exists():
@@ -274,67 +201,20 @@ def build_specific_platform(platform_name, arch, output_dir=None, onefile=True):
         print("\n[X] Error: Executable not found")
         return False
 
-    # Copy Chromium browser to package
-    print("\n  Bundling Chromium browser...")
-    browser_bundled = copy_chromium_to_package(temp_dir)
-
     # Create README.txt
-    if browser_bundled:
-        readme_content = f"""Spreado v{get_version()} - {platform_name} ({arch})
+    readme_content = f"""Spreado v{get_version()} - {platform_name} ({arch})
 
-=== Browser Auto-Detection ===
+=== System Browser via CDP ===
 
-Spreado automatically detects installed Chrome/Edge browsers.
+Spreado requires an installed Chrome, Edge, Chromium, or Brave browser.
+It starts that system browser with a dedicated Spreado profile and connects
+through the Chrome DevTools Protocol (CDP). No browser is bundled.
 Just run the executable directly:
 
   Linux/macOS:  ./spreado --help
   Windows:      spreado.exe --help
 
-The program will show which browser is being used:
-  [Browser] Using: auto-detected: /usr/bin/google-chrome
-
-
-=== Option 1: Use bundled Chromium ===
-
-Chromium browser is bundled in the 'browser' folder.
-Use the run script to use the bundled browser:
-
-  Linux/macOS:  ./run.sh --help
-  Windows:      run.bat --help
-
-
-=== Option 2: Manual browser configuration ===
-
-If auto-detection doesn't work, you can manually specify:
-
-  # Use system Chrome
-  export SPREADO_BROWSER_CHANNEL=chrome
-
-  # Or use Edge
-  export SPREADO_BROWSER_CHANNEL=msedge
-
-  # Or specify browser path directly
-  export SPREADO_BROWSER_PATH="/path/to/chrome"
-
-
-For more info: https://github.com/BadKid90s/Spreado
-"""
-    else:
-        readme_content = f"""Spreado v{get_version()} - {platform_name} ({arch})
-
-=== Browser Auto-Detection (Default) ===
-
-Spreado automatically detects installed Chrome/Edge browsers.
-Just run the executable directly:
-
-  Linux/macOS:  ./spreado --help
-  Windows:      spreado.exe --help
-
-The program will show which browser is being used:
-  [Browser] Using: auto-detected: /usr/bin/google-chrome
-
-
-=== Manual Configuration (if needed) ===
+=== Manual Configuration ===
 
 If auto-detection doesn't work, you can manually specify:
 
@@ -347,8 +227,8 @@ If auto-detection doesn't work, you can manually specify:
   # Or specify browser path directly
   export SPREADO_BROWSER_PATH="/path/to/chrome"
 
-  # Or install Playwright Chromium
-  playwright install chromium
+  # Optional persistent profile location
+  export SPREADO_BROWSER_PROFILE_DIR="/path/to/spreado-profile"
 
 
 For more info: https://github.com/BadKid90s/Spreado
@@ -356,24 +236,6 @@ For more info: https://github.com/BadKid90s/Spreado
     readme_path = temp_dir / "README.txt"
     readme_path.write_text(readme_content, encoding="utf-8")
     print("  Created: README.txt")
-
-    # Create run script (with browser path set)
-    if browser_bundled:
-        if platform.system() == "Windows":
-            run_script = temp_dir / "run.bat"
-            run_content = f'@echo off\nset PLAYWRIGHT_BROWSERS_PATH=%~dp0browser\n"{APP_NAME}.exe" %*\n'
-            run_script.write_text(run_content, encoding="utf-8")
-            print("  Created: run.bat")
-        else:
-            run_script = temp_dir / "run.sh"
-            run_content = f"""#!/bin/bash
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-export PLAYWRIGHT_BROWSERS_PATH="$SCRIPT_DIR/browser"
-"$SCRIPT_DIR/{APP_NAME}" "$@"
-"""
-            run_script.write_text(run_content, encoding="utf-8")
-            os.chmod(run_script, 0o755)
-            print("  Created: run.sh")
 
     # Ensure output directory exists
     output_dir.mkdir(parents=True, exist_ok=True)

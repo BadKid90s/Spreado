@@ -4,7 +4,7 @@
 
 ## 项目概述
 
-Spreado 是一个基于 Python 和 Playwright 开发的多平台视频上传工具，支持将视频发布到抖音、小红书、快手和腾讯视频号等中国社交媒体平台。
+Spreado 是一个基于 Python、系统 Chromium 浏览器和 CDP 的多平台视频上传工具，支持将视频发布到抖音、小红书、快手和腾讯视频号等中国社交媒体平台。
 
 ### 核心特性
 
@@ -13,7 +13,7 @@ Spreado 是一个基于 Python 和 Playwright 开发的多平台视频上传工�
 - **自动化认证**: 支持有头模式登录和无头模式 Cookie 验证
 - **CLI 工具**: 提供完整的命令行工具，支持登录、上传、验证等操作
 - **详细日志**: 使用 loguru 日志系统记录详细的操作日志
-- **反检测技术**: 使用 playwright-stealth 库绕过网站的自动化检测
+- **真实浏览器**: 通过 CDP 控制系统安装的 Chrome、Edge、Chromium 或 Brave
 
 ## 项目结构
 
@@ -53,9 +53,10 @@ Spreado/
 
 | 技术 | 用途 |
 |------|------|
-| Python 3.8+ | 主要编程语言 |
-| Playwright | 浏览器自动化框架 |
-| playwright-stealth | 反检测库 |
+| Python 3.10+ | 主要编程语言 |
+| Chrome DevTools Protocol | 连接并控制系统浏览器 |
+| Playwright | 将现有 Page/Locator 操作适配为 CDP 调用 |
+| playwright-stealth | 页面初始化反检测配置 |
 | loguru | 日志记录 |
 | argparse | 命令行参数解析 |
 | pytz | 时区处理 |
@@ -66,7 +67,7 @@ Spreado/
 
 - Python 3.10 或更高版本
 - 操作系统：Windows、macOS、Linux
-- 浏览器：Chromium（通过 Playwright 安装）
+- 浏览器：系统已安装的 Chrome、Edge、Chromium 或 Brave
 
 ### 安装依赖
 
@@ -84,8 +85,6 @@ source .venv/bin/activate  # Linux/macOS
 # 安装依赖
 pip install -r requirements.txt
 
-# 安装 Playwright 浏览器
-playwright install chromium
 ```
 
 ## 使用方法
@@ -222,9 +221,12 @@ if __name__ == "__main__":
 
 ### StealthBrowser 浏览器封装
 
-`StealthBrowser` 类封装了 Playwright 浏览器实例，主要特性：
+`StealthBrowser` 启动系统浏览器并通过 CDP 连接，主要特性：
 
-- **反检测**: 集成 playwright-stealth 库
+- **系统浏览器**: 不启动或回退到 Playwright 内置 Chromium
+- **持久配置**: 使用 Spreado 专用 profile，跨运行保留浏览器状态
+- **隔离运行**: 不接管用户日常 Chrome 配置
+- **反检测**: 集成 playwright-stealth 页面初始化配置
 - **上下文管理**: 实现 `async with` 协议，确保资源正确释放
 - **Cookie 管理**: 支持从文件加载和保存 Cookie
 
@@ -294,7 +296,7 @@ cookies/
 |------|----------|
 | 认证失败 | 重新执行 `spreado login <平台>` |
 | 上传失败 | 使用 `--debug` 参数查看详细信息 |
-| 找不到浏览器 | 执行 `playwright install chromium` |
+| 找不到浏览器 | 安装受支持的系统浏览器，或设置 `SPREADO_BROWSER_PATH` |
 | 依赖问题 | 执行 `pip install --upgrade spreado` |
 | UI 元素变化 | 平台界面更新可能需要更新选择器 |
 
@@ -302,7 +304,7 @@ cookies/
 
 1. 使用 `--debug` 参数查看详细日志
 2. 查看终端输出的错误信息
-3. 确保已安装 Playwright 浏览器
+3. 确保已安装 Chrome、Edge、Chromium 或 Brave
 
 ### 项目维护
 

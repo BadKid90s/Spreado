@@ -52,10 +52,9 @@ class BaseUploader(ABC):
 
     @property
     def _browser_channel(self) -> Optional[str]:
-        """登录时使用的浏览器通道。None = 使用系统 Chrome（默认）。
+        """登录时使用的浏览器通道。None = 自动检测系统浏览器。
 
-        子类可覆盖以使用 Playwright 内置 Chromium，
-        例如快手因 system Chrome 会话冲突需要使用 Chromium。
+        子类可覆盖以选择特定的系统浏览器类型。
         """
         return None
 

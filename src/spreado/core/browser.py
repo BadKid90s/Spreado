@@ -1,74 +1,150 @@
+import asyncio
+import json
 import os
 import platform
+import subprocess
+import urllib.request
 from pathlib import Path
-from typing import Optional, Literal
+from typing import Literal, Optional
 
-import json
 from playwright.async_api import (
-    async_playwright,
-    Page,
-    BrowserContext,
     Browser,
+    BrowserContext,
+    Page,
     Playwright,
+    async_playwright,
 )
 from playwright_stealth import Stealth
 
 from ..utils.permissions import ensure_private_directory, restrict_private_file
 
-# 支持的浏览器通道
 BrowserChannel = Literal["chrome", "msedge", "chromium", None]
 
-# 各平台常见浏览器路径
-BROWSER_PATHS = {
-    "windows": [
-        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
-    ],
-    "darwin": [  # macOS
-        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-        "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
-        "/Applications/Chromium.app/Contents/MacOS/Chromium",
-    ],
-    "linux": [
-        "/usr/bin/google-chrome",
-        "/usr/bin/google-chrome-stable",
-        "/usr/bin/chromium",
-        "/usr/bin/chromium-browser",
-        "/usr/bin/microsoft-edge",
-        "/snap/bin/chromium",
-    ],
-}
 
-
-def _detect_system_browser() -> Optional[str]:
-    """
-    自动检测系统已安装的浏览器
-
-    Returns:
-        浏览器可执行文件路径，未找到返回 None
-    """
+def _browser_candidates() -> dict[str, list[Path]]:
+    """Return installed-browser candidates grouped by product."""
     system = platform.system().lower()
+    if system == "windows":
+        program_files = Path(os.environ.get("ProgramFiles", r"C:\Program Files"))
+        program_files_x86 = Path(
+            os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+        )
+        local_app_data = Path(os.environ.get("LOCALAPPDATA", ""))
+        return {
+            "chrome": [
+                program_files / "Google/Chrome/Application/chrome.exe",
+                program_files_x86 / "Google/Chrome/Application/chrome.exe",
+                local_app_data / "Google/Chrome/Application/chrome.exe",
+            ],
+            "msedge": [
+                program_files / "Microsoft/Edge/Application/msedge.exe",
+                program_files_x86 / "Microsoft/Edge/Application/msedge.exe",
+                local_app_data / "Microsoft/Edge/Application/msedge.exe",
+            ],
+            "chromium": [
+                local_app_data / "Chromium/Application/chrome.exe",
+                program_files / "BraveSoftware/Brave-Browser/Application/brave.exe",
+                local_app_data / "BraveSoftware/Brave-Browser/Application/brave.exe",
+            ],
+        }
+    if system == "darwin":
+        return {
+            "chrome": [
+                Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+            ],
+            "msedge": [
+                Path("/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge")
+            ],
+            "chromium": [
+                Path("/Applications/Chromium.app/Contents/MacOS/Chromium"),
+                Path("/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"),
+            ],
+        }
+    return {
+        "chrome": [
+            Path("/usr/bin/google-chrome"),
+            Path("/usr/bin/google-chrome-stable"),
+        ],
+        "msedge": [
+            Path("/usr/bin/microsoft-edge"),
+            Path("/usr/bin/microsoft-edge-stable"),
+        ],
+        "chromium": [
+            Path("/usr/bin/chromium"),
+            Path("/usr/bin/chromium-browser"),
+            Path("/snap/bin/chromium"),
+            Path("/usr/bin/brave-browser"),
+        ],
+    }
 
-    for path in BROWSER_PATHS.get(system, []):
-        if Path(path).exists():
+
+def _resolve_system_browser(
+    executable_path: Optional[str] = None, channel: BrowserChannel = None
+) -> Path:
+    """Resolve a local Chromium browser without a bundled fallback."""
+    configured_path = executable_path or os.environ.get("SPREADO_BROWSER_PATH")
+    if configured_path:
+        path = Path(configured_path).expanduser()
+        if path.is_file():
             return path
+        raise RuntimeError(f"配置的系统浏览器不存在: {path}")
 
-    return None
+    selected_channel = channel or os.environ.get("SPREADO_BROWSER_CHANNEL")
+    candidates = _browser_candidates()
+    if selected_channel and selected_channel not in candidates:
+        raise RuntimeError("SPREADO_BROWSER_CHANNEL 仅支持 chrome、msedge 或 chromium")
+
+    channels = [selected_channel] if selected_channel else list(candidates)
+    for browser_channel in channels:
+        for path in candidates[browser_channel]:
+            if path.is_file():
+                return path
+
+    raise RuntimeError(
+        "未找到支持 CDP 的系统浏览器。请安装 Chrome、Edge、Chromium 或 Brave，"
+        "或通过 SPREADO_BROWSER_PATH 指定浏览器可执行文件。"
+    )
+
+
+def _default_profile_dir() -> Path:
+    """Return Spreado's persistent, isolated system-browser profile."""
+    configured_path = os.environ.get("SPREADO_BROWSER_PROFILE_DIR")
+    if configured_path:
+        return Path(configured_path).expanduser()
+
+    system = platform.system().lower()
+    if system == "windows":
+        base_dir = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData/Local"))
+        return base_dir / "Spreado/browser-profile"
+    if system == "darwin":
+        return Path.home() / "Library/Application Support/Spreado/browser-profile"
+    base_dir = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    return base_dir / "spreado/browser-profile"
+
+
+def _build_cdp_command(
+    executable_path: Path, profile_dir: Path, headless: bool
+) -> list[str]:
+    command = [
+        str(executable_path),
+        "--remote-debugging-address=127.0.0.1",
+        "--remote-debugging-port=0",
+        f"--user-data-dir={profile_dir}",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--disable-blink-features=AutomationControlled",
+    ]
+    if headless:
+        command.append("--headless=new")
+    command.append("about:blank")
+    return command
 
 
 class StealthBrowser:
-    """
-    支持多种浏览器选项的隐身浏览器
+    """Control a locally installed browser through Chrome DevTools Protocol.
 
-    浏览器选择优先级：
-    1. executable_path 参数 - 指定浏览器路径
-    2. channel 参数 - 使用系统浏览器 (chrome/msedge)
-    3. SPREADO_BROWSER_PATH 环境变量 - 指定浏览器路径
-    4. SPREADO_BROWSER_CHANNEL 环境变量 - 使用系统浏览器
-    5. 自动检测系统已安装的 Chrome/Edge/Chromium
-    6. 默认使用 Playwright 内置的 Chromium
+    Playwright remains only as the adapter used by the existing Page/Locator
+    implementations. It never launches or falls back to bundled Chromium.
     """
 
     def __init__(
@@ -77,11 +153,6 @@ class StealthBrowser:
         channel: BrowserChannel = None,
         executable_path: Optional[str] = None,
     ):
-        """
-        :param headless: 是否无头模式
-        :param channel: 浏览器通道 ("chrome", "msedge", "chromium", None)
-        :param executable_path: 浏览器可执行文件路径
-        """
         self.headless = headless
         self.channel = channel
         self.executable_path = executable_path
@@ -89,6 +160,9 @@ class StealthBrowser:
         self.playwright: Optional[Playwright] = None
         self.browser: Optional[Browser] = None
         self.context: Optional[BrowserContext] = None
+        self._browser_process: Optional[subprocess.Popen] = None
+        self._profile_dir = _default_profile_dir()
+        self._cdp_endpoint: Optional[str] = None
 
     @classmethod
     async def create(
@@ -97,93 +171,109 @@ class StealthBrowser:
         channel: BrowserChannel = None,
         executable_path: Optional[str] = None,
     ) -> "StealthBrowser":
-        """工厂方法"""
         instance = cls(headless, channel, executable_path)
         await instance.__aenter__()
         return instance
 
-    def _get_browser_config(self) -> tuple[dict, str]:
-        """
-        获取浏览器配置
+    async def _wait_for_cdp_endpoint(self, timeout: float = 15.0) -> str:
+        if not self._browser_process:
+            raise RuntimeError("系统浏览器进程尚未启动")
 
-        Returns:
-            (config_dict, browser_source) - 配置字典和浏览器来源描述
-        """
-        config = {}
+        active_port_file = self._profile_dir / "DevToolsActivePort"
+        deadline = asyncio.get_running_loop().time() + timeout
+        while asyncio.get_running_loop().time() < deadline:
+            if (
+                self._browser_process.poll() is not None
+                and self._browser_process.returncode != 0
+            ):
+                raise RuntimeError(
+                    f"系统浏览器启动失败，退出码: {self._browser_process.returncode}"
+                )
+            try:
+                port = int(active_port_file.read_text(encoding="utf-8").splitlines()[0])
+                return f"http://127.0.0.1:{port}"
+            except (FileNotFoundError, IndexError, ValueError, OSError):
+                await asyncio.sleep(0.1)
 
-        # 优先级 1: 参数指定的 executable_path
-        if self.executable_path:
-            config["executable_path"] = self.executable_path
-            return config, f"executable_path: {self.executable_path}"
+        raise RuntimeError("等待系统浏览器 CDP 端点超时")
 
-        # 优先级 2: 参数指定的 channel
-        if self.channel:
-            if self.channel != "chromium":
-                config["channel"] = self.channel
-            return config, f"channel: {self.channel}"
+    def _read_cdp_endpoint(self) -> Optional[str]:
+        try:
+            port = int(
+                (self._profile_dir / "DevToolsActivePort")
+                .read_text(encoding="utf-8")
+                .splitlines()[0]
+            )
+        except (FileNotFoundError, IndexError, ValueError, OSError):
+            return None
+        return f"http://127.0.0.1:{port}"
 
-        # 优先级 3: 环境变量 SPREADO_BROWSER_PATH
-        env_path = os.environ.get("SPREADO_BROWSER_PATH")
-        if env_path and Path(env_path).exists():
-            config["executable_path"] = env_path
-            return config, f"env SPREADO_BROWSER_PATH: {env_path}"
+    async def _cdp_endpoint_is_available(self, endpoint: str) -> bool:
+        def probe() -> bool:
+            try:
+                with urllib.request.urlopen(
+                    f"{endpoint}/json/version", timeout=0.5
+                ) as response:
+                    return response.status == 200
+            except OSError:
+                return False
 
-        # 优先级 4: 环境变量 SPREADO_BROWSER_CHANNEL
-        env_channel = os.environ.get("SPREADO_BROWSER_CHANNEL")
-        if env_channel in ("chrome", "msedge"):
-            config["channel"] = env_channel
-            return config, f"env SPREADO_BROWSER_CHANNEL: {env_channel}"
-
-        # 优先级 5: 自动检测系统浏览器
-        detected_path = _detect_system_browser()
-        if detected_path:
-            config["executable_path"] = detected_path
-            return config, f"auto-detected: {detected_path}"
-
-        # 默认: 使用 Playwright 内置 Chromium
-        return config, "Playwright built-in Chromium"
+        return await asyncio.to_thread(probe)
 
     async def __aenter__(self):
-        self.playwright = await async_playwright().start()
+        if self.context is not None:
+            return self
 
-        args = [
-            "--disable-blink-features=AutomationControlled",
-            "--no-sandbox",
-            "--disable-infobars",
-            "--disable-dev-shm-usage",
-        ]
-
-        # 获取浏览器配置
-        browser_config, browser_source = self._get_browser_config()
-        print(f"[Browser] Using: {browser_source}")
-
-        self.browser = await self.playwright.chromium.launch(
-            headless=self.headless,
-            args=args,
-            **browser_config,
-        )
-
-        self.context = await self.browser.new_context(
-            no_viewport=True, ignore_https_errors=True
-        )
-
-        # Patch attachShadow to force all shadow roots to 'open' mode
-        # This allows Playwright's page.evaluate() to access closed shadow DOMs
-        await self.context.add_init_script("""
-            Element.prototype._attachShadow = Element.prototype.attachShadow;
-            Element.prototype.attachShadow = function(init) {
-                if (init && init.mode === 'closed') {
-                    init = Object.assign({}, init, { mode: 'open' });
+        browser_path = _resolve_system_browser(self.executable_path, self.channel)
+        ensure_private_directory(self._profile_dir)
+        active_port_file = self._profile_dir / "DevToolsActivePort"
+        print(f"[Browser] CDP system browser: {browser_path}")
+        print(f"[Browser] Spreado profile: {self._profile_dir}")
+        try:
+            endpoint = self._read_cdp_endpoint()
+            if not endpoint or not await self._cdp_endpoint_is_available(endpoint):
+                active_port_file.unlink(missing_ok=True)
+                command = _build_cdp_command(
+                    browser_path, self._profile_dir, self.headless
+                )
+                process_options = {
+                    "stdin": subprocess.DEVNULL,
+                    "stdout": subprocess.DEVNULL,
+                    "stderr": subprocess.DEVNULL,
                 }
-                return this._attachShadow(init);
-            };
-        """)
+                if platform.system().lower() == "windows":
+                    process_options["creationflags"] = getattr(
+                        subprocess, "CREATE_NEW_PROCESS_GROUP", 0
+                    )
+                else:
+                    process_options["start_new_session"] = True
+                self._browser_process = subprocess.Popen(command, **process_options)
+                endpoint = await self._wait_for_cdp_endpoint()
 
-        stealth = Stealth(
-            navigator_languages_override=("zh-CN", "zh"), init_scripts_only=True
-        )
-        await stealth.apply_stealth_async(self.context)
+            self._cdp_endpoint = endpoint
+            self.playwright = await async_playwright().start()
+            self.browser = await self.playwright.chromium.connect_over_cdp(endpoint)
+            if not self.browser.contexts:
+                raise RuntimeError("CDP 连接成功，但系统浏览器没有可用上下文")
+            self.context = self.browser.contexts[0]
 
+            await self.context.add_init_script("""
+                Element.prototype._attachShadow = Element.prototype.attachShadow;
+                Element.prototype.attachShadow = function(init) {
+                    if (init && init.mode === 'closed') {
+                        init = Object.assign({}, init, { mode: 'open' });
+                    }
+                    return this._attachShadow(init);
+                };
+            """)
+            stealth = Stealth(
+                navigator_languages_override=("zh-CN", "zh"),
+                init_scripts_only=True,
+            )
+            await stealth.apply_stealth_async(self.context)
+        except Exception:
+            await self.__aexit__(None, None, None)
+            raise
         return self
 
     async def new_page(self) -> Page:
@@ -192,50 +282,36 @@ class StealthBrowser:
         return await self.context.new_page()
 
     async def load_cookies_from_file(self, file_path: str | Path) -> None:
-        """
-        从 JSON 文件加载 Cookie 并注入到当前上下文
-
-        支持两种文件格式：
-        1. Playwright storage_state 文件（包含 "cookies" 字段）
-        2. 仅为 cookies 列表的纯 JSON
-        """
+        """Load a Playwright storage-state file or plain cookie list."""
         if self.context is None:
             raise RuntimeError("Context 未初始化")
 
         path = Path(file_path)
         if not path.is_file():
-            # 如有 logger 建议用 logger，这里先用 print 占位
             raise RuntimeError(f"[警告] Cookie 文件不存在: {path}")
 
         try:
-            with path.open("r", encoding="utf-8") as f:
-                data = json.load(f)
-        except Exception as e:
-            raise RuntimeError(f"[错误] 读取 Cookie 文件失败: {path}，错误: {e}")
+            with path.open("r", encoding="utf-8") as file:
+                data = json.load(file)
+        except Exception as exc:
+            raise RuntimeError(
+                f"[错误] 读取 Cookie 文件失败: {path}，错误: {exc}"
+            ) from exc
 
-        # 1. 兼容 Playwright 的 storage_state 结构
-        #    {"cookies": [...], "origins": [...]}
         if isinstance(data, dict) and "cookies" in data:
             raw_cookies = data["cookies"]
         else:
-            # 2. 兼容直接是 cookies 列表的情况
             raw_cookies = data
-
         if not isinstance(raw_cookies, list):
             raise RuntimeError(
                 f"[错误] Cookie 文件格式不正确，应为列表或包含 'cookies' 字段: {path}"
             )
-
-        # 强制转换成 Playwright Cookie 类型，方便 IDE 类型检查
-        cookies = raw_cookies
-
-        if not cookies:
+        if not raw_cookies:
             raise RuntimeError(f"[提示] Cookie 文件为空: {path}")
-
-        await self.context.add_cookies(cookies)
+        await self.context.add_cookies(raw_cookies)
 
     async def storage_state(self, path: Path | str, *, secure_directory: bool = False):
-        """保存当前 Cookie，并在 POSIX 上限制文件访问权限。"""
+        """Save cookies and restrict their POSIX filesystem permissions."""
         if not self.context:
             raise RuntimeError("Context 未初始化")
         target = Path(path)
@@ -252,55 +328,28 @@ class StealthBrowser:
         await self.__aexit__(None, None, None)
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if self.context:
-            await self.context.close()
-            self.context = None
         if self.browser:
-            await self.browser.close()
+            try:
+                cdp_session = await self.browser.new_browser_cdp_session()
+                await cdp_session.send("Browser.close")
+            except Exception:
+                pass
+            try:
+                await self.browser.close()
+            except Exception:
+                pass
             self.browser = None
+        self.context = None
         if self.playwright:
             await self.playwright.stop()
             self.playwright = None
-
-
-# ==========================================
-# 实际使用示例
-# ==========================================
-
-
-class MySpider:
-    def __init__(self):
-        # 推荐方式 1：用 create 工厂（最安全）
-        self.browser: Optional[StealthBrowser] = None
-
-        # 推荐方式 2：如果你喜欢 async with（最优雅）
-        self._browser_context_manager = None
-
-    async def start(self):
-        # 方式1：工厂方式（推荐用于长生命周期对象）
-        self.browser = await StealthBrowser.create(headless=True)
-
-    async def some_task(self):
-        page = await self.browser.new_page()
-        await page.goto("https://httpbin.org/headers")
-        print(await page.content())
-        await page.close()
-
-    async def close(self):
-        if self.browser:
-            await self.browser.close()
-            self.browser = None
-
-
-# 使用示例（完美）
-async def main():
-    spider = MySpider()
-    await spider.start()
-
-    for i in range(10):
-        await spider.some_task()
-
-    await spider.close()  # 手动关闭（推荐）
-
-    # 就算你忘记 close()，__del__ + weakref.finalize 也会自动清理！
-    # 绝不漏关，内存永不泄露！
+        if self._browser_process:
+            if self._browser_process.poll() is None:
+                self._browser_process.terminate()
+                try:
+                    await asyncio.to_thread(self._browser_process.wait, timeout=5)
+                except subprocess.TimeoutExpired:
+                    self._browser_process.kill()
+                    await asyncio.to_thread(self._browser_process.wait, timeout=5)
+            self._browser_process = None
+        self._cdp_endpoint = None

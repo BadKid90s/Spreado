@@ -31,7 +31,7 @@
 
 - Python **3.10** 或更高版本
 - 操作系统：Windows, macOS, Linux
-- 浏览器：自动检测系统已安装的 Chrome/Edge，或使用 Playwright Chromium
+- 浏览器：系统已安装的 Chrome、Edge、Chromium 或 Brave
 
 ## 📦 安装指南
 
@@ -65,7 +65,7 @@ uv add spreado
 pip install spreado
 ```
 
-> 💡 **无需单独安装浏览器！** Spreado 会自动检测系统已安装的 Chrome 或 Edge 浏览器。如果未检测到，会使用 Playwright 内置的 Chromium。
+> Spreado 会自动检测系统安装的 Chrome、Edge、Chromium 或 Brave，并通过 CDP 控制。项目不再下载或使用 Playwright 内置 Chromium。
 
 ### 方式三：从源码安装
 
@@ -232,11 +232,19 @@ if __name__ == "__main__":
 
 ## 🌐 浏览器配置
 
-Spreado 支持多种浏览器选项，按以下优先级自动选择：
+Spreado 通过 Chrome DevTools Protocol（CDP）连接系统真实浏览器，按以下优先级选择：
 
-1. **自动检测系统浏览器**（默认）- 自动查找已安装的 Chrome/Edge
-2. **环境变量指定** - 手动配置浏览器
-3. **Playwright Chromium** - 作为后备选项
+1. **显式路径** - `SPREADO_BROWSER_PATH`
+2. **浏览器类型** - `SPREADO_BROWSER_CHANNEL`
+3. **自动检测** - 查找已安装的 Chrome、Edge、Chromium 或 Brave
+
+浏览器使用持久化的 Spreado 专用配置目录，不会接管日常浏览器配置。默认位置为：
+
+| 平台 | 配置目录 |
+|-----|---------|
+| Windows | `%LOCALAPPDATA%\Spreado\browser-profile` |
+| macOS | `~/Library/Application Support/Spreado/browser-profile` |
+| Linux | `${XDG_CONFIG_HOME:-~/.config}/spreado/browser-profile` |
 
 ### 自动检测
 
@@ -244,9 +252,9 @@ Spreado 支持多种浏览器选项，按以下优先级自动选择：
 
 | 平台 | 检测的浏览器 |
 |-----|------------|
-| Windows | Chrome, Edge |
-| macOS | Chrome, Edge, Chromium |
-| Linux | google-chrome, chromium, edge |
+| Windows | Chrome, Edge, Chromium, Brave |
+| macOS | Chrome, Edge, Chromium, Brave |
+| Linux | Chrome, Edge, Chromium, Brave |
 
 ### 手动指定浏览器
 
@@ -261,14 +269,9 @@ export SPREADO_BROWSER_CHANNEL=msedge
 
 # 或指定浏览器路径
 export SPREADO_BROWSER_PATH="/path/to/chrome"
-```
 
-### 使用 Playwright Chromium
-
-如果系统没有安装浏览器，可手动安装 Playwright Chromium：
-
-```bash
-playwright install chromium
+# 可选：指定 Spreado 专用的持久化配置目录
+export SPREADO_BROWSER_PROFILE_DIR="/path/to/spreado-profile"
 ```
 
 ## 🛠️ 故障排除
@@ -277,13 +280,9 @@ playwright install chromium
 
 1. **提示找不到浏览器？**
    
-   Spreado 会自动检测系统 Chrome/Edge。如果检测不到，可以：
+   请先安装 Chrome、Edge、Chromium 或 Brave。若自动检测不到，可指定路径：
    ```bash
-   # 方式1：手动指定浏览器路径
    export SPREADO_BROWSER_PATH="/path/to/chrome"
-   
-   # 方式2：安装 Playwright Chromium
-   playwright install chromium
    ```
 
 2. **Cookie 过期怎么办？**
