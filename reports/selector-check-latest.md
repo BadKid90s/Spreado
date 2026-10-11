@@ -1,6 +1,6 @@
 # 平台元素健康度报告
 
-- 生成时间: `2026-10-10T17:57:21+08:00`
+- 生成时间: `2026-10-11T18:06:39+08:00`
 - 平台总数: 4
 
 ## 状态汇总
@@ -8,7 +8,7 @@
 | 平台 | 状态 | 登录页 | login_selectors | publish 页 | authed_selectors |
 |---|---|---|---|---|---|
 | 抖音 (`douyin`) | **OK** | ✓ | 2/4 | ✓ | 2/4 |
-| 小红书 (`xiaohongshu`) | **UNREACHABLE** | ✗ | 0/0 | ✓ | 0/2 |
+| 小红书 (`xiaohongshu`) | **AUTHED_BROKEN** | ✓ | 2/4 | ✓ | 0/2 |
 | 快手 (`kuaishou`) | **AUTHED_BROKEN** | ✓ | 2/4 | ✓ | 0/2 |
 | 视频号 (`shipinhao`) | **AUTHED_BROKEN** | ✓ | 2/4 | ✓ | 0/2 |
 
@@ -28,13 +28,13 @@
   - ✗ `input[placeholder*='作品标题']` (found=False, visible=False)
   - ✗ `div.semi-upload` (found=False, visible=False)
 
-### 小红书 (`xiaohongshu`) — UNREACHABLE
+### 小红书 (`xiaohongshu`) — AUTHED_BROKEN
 
-**登录页** `https://creator.xiaohongshu.com/` — reachable=False
-  - 导航错误: `Page.goto: Timeout 30000ms exceeded.
-Call log:
-  - navigating to "https://creator.xiaohongshu.com/", waiting until "domcontentloaded"
-`
+**登录页** `https://creator.xiaohongshu.com/` — reachable=True
+  - ✓ `text="短信登录"`
+  - ✗ `text="扫码登录"` (found=False, visible=False)
+  - ✓ `button:has-text("登")`
+  - ✗ `.login-btn` (found=False, visible=False)
 
 **publish 页** `https://creator.xiaohongshu.com/publish/publish` — reachable=True
   - ✗ `input.upload-input` (found=False, visible=False)
