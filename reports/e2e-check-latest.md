@@ -1,16 +1,16 @@
 # E2E 测试报告
 
-- 生成时间: `2026-10-22T16:45:01+08:00`
+- 生成时间: `2026-10-23T16:39:39+08:00`
 - 测试视频: `/home/runner/work/Spreado/Spreado/src/spreado/examples/videos/demo.mp4`
 
 ## 结果汇总
 
 | 平台 | 状态 | 通过步骤 | 总步骤 | 耗时 |
 |---|---|---|---|---|
-| 抖音 (`douyin`) | **✓ PASS** | 11/11 | 11 | 55.3s |
-| 小红书 (`xiaohongshu`) | **✗ FAIL** | 2/7 | 7 | 25.0s |
-| 快手 (`kuaishou`) | **✗ FAIL** | 2/7 | 7 | 29.1s |
-| 视频号 (`shipinhao`) | **✗ FAIL** | 2/7 | 7 | 29.6s |
+| 抖音 (`douyin`) | **✓ PASS** | 11/11 | 11 | 57.0s |
+| 小红书 (`xiaohongshu`) | **✗ FAIL** | 2/7 | 7 | 24.1s |
+| 快手 (`kuaishou`) | **✗ FAIL** | 2/7 | 7 | 41.2s |
+| 视频号 (`shipinhao`) | **✗ FAIL** | 2/7 | 7 | 29.5s |
 
 ## 详细结果
 
@@ -18,26 +18,26 @@
 
 | # | 步骤 | 状态 | 耗时 | 说明 |
 |---|---|---|---|---|
-| 1 | verify_cookie | ✓ | 5.2s |  |
-| 2 | goto_upload_page | ✓ | 2.0s |  |
-| 3 | upload_video_file | ✓ | 3.4s |  |
-| 4 | wait_for_upload_complete | ✓ | 1.8s |  |
-| 5 | fill_video_info | ✓ | 2.1s |  |
-| 6 | set_thumbnail | ✓ | 4.0s |  |
+| 1 | verify_cookie | ✓ | 8.9s |  |
+| 2 | goto_upload_page | ✓ | 1.9s |  |
+| 3 | upload_video_file | ✓ | 1.2s |  |
+| 4 | wait_for_upload_complete | ✓ | 1.4s |  |
+| 5 | fill_video_info | ✓ | 2.2s |  |
+| 6 | set_thumbnail | ✓ | 3.9s |  |
 | 7 | set_third_party_platforms | ✓ | — |  |
 | 8 | handle_auto_video_cover | ✓ | 0.0s |  |
 | 9 | verify_publish_button | ✓ | 0.1s |  |
-| 10 | upload_video | ✓ | 13.5s |  |
-| 11 | upload_video_flow | ✓ | 23.1s |  |
+| 10 | upload_video | ✓ | 10.6s |  |
+| 11 | upload_video_flow | ✓ | 26.8s |  |
 
 ### 小红书 (`xiaohongshu`) — ✗ FAIL
 
 | # | 步骤 | 状态 | 耗时 | 说明 |
 |---|---|---|---|---|
-| 1 | verify_cookie | ✓ | 11.5s |  |
+| 1 | verify_cookie | ✓ | 11.1s |  |
 | 2 | login_flow | ✗ | 0.5s |  |
 | 3 | login_and_upload | ✗ | 0.5s |  |
-| 4 | upload_video_flow | ✓ | 12.5s |  |
+| 4 | upload_video_flow | ✓ | 12.1s |  |
 | 5 | upload_video_file | ✗ | — | 未执行（上游步骤失败） |
 | 6 | wait_for_upload_complete | ✗ | — | 未执行（上游步骤失败） |
 | 7 | fill_video_info | ✗ | — | 未执行（上游步骤失败） |
@@ -46,10 +46,10 @@
 
 | # | 步骤 | 状态 | 耗时 | 说明 |
 |---|---|---|---|---|
-| 1 | verify_cookie | ✓ | 13.6s |  |
+| 1 | verify_cookie | ✓ | 19.7s |  |
 | 2 | login_flow | ✗ | 0.5s |  |
 | 3 | login_and_upload | ✗ | 0.5s |  |
-| 4 | upload_video_flow | ✓ | 14.6s |  |
+| 4 | upload_video_flow | ✓ | 20.6s |  |
 | 5 | upload_video_file | ✗ | — | 未执行（上游步骤失败） |
 | 6 | wait_for_upload_complete | ✗ | — | 未执行（上游步骤失败） |
 | 7 | fill_video_info | ✗ | — | 未执行（上游步骤失败） |
@@ -61,7 +61,7 @@
 | 1 | verify_cookie | ✓ | 13.8s |  |
 | 2 | login_flow | ✗ | 0.5s |  |
 | 3 | login_and_upload | ✗ | 0.5s |  |
-| 4 | upload_video_flow | ✓ | 14.8s |  |
+| 4 | upload_video_flow | ✓ | 14.7s |  |
 | 5 | upload_video_file | ✗ | — | 未执行（上游步骤失败） |
 | 6 | wait_for_upload_complete | ✗ | — | 未执行（上游步骤失败） |
 | 7 | fill_video_info | ✗ | — | 未执行（上游步骤失败） |
