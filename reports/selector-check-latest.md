@@ -1,13 +1,13 @@
 # 平台元素健康度报告
 
-- 生成时间: `2026-11-02T19:17:28+08:00`
+- 生成时间: `2026-11-03T18:58:54+08:00`
 - 平台总数: 4
 
 ## 状态汇总
 
 | 平台 | 状态 | 登录页 | login_selectors | publish 页 | authed_selectors |
 |---|---|---|---|---|---|
-| 抖音 (`douyin`) | **OK** | ✓ | 2/4 | ✓ | 1/4 |
+| 抖音 (`douyin`) | **OK** | ✓ | 2/4 | ✓ | 2/4 |
 | 小红书 (`xiaohongshu`) | **AUTHED_BROKEN** | ✓ | 2/4 | ✓ | 0/2 |
 | 快手 (`kuaishou`) | **AUTHED_BROKEN** | ✓ | 2/4 | ✓ | 0/2 |
 | 视频号 (`shipinhao`) | **AUTHED_BROKEN** | ✓ | 2/4 | ✓ | 0/2 |
@@ -23,7 +23,7 @@
   - ✗ `.login-btn` (found=False, visible=False)
 
 **publish 页** `https://creator.douyin.com/creator-micro/content/upload` — reachable=True
-  - ✗ `div[class^='container']` (found=True, visible=False)
+  - ✓ `div[class^='container']`
   - ✓ `div[class*='upload']`
   - ✗ `input[placeholder*='作品标题']` (found=False, visible=False)
   - ✗ `div.semi-upload` (found=False, visible=False)
